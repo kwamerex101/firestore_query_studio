@@ -4,8 +4,6 @@
 
 **Phase 1 is read-only:** no writes, no deletes, no seeding. The executor and IPC surface do not expose mutation APIs.
 
-For the original product vision and phased roadmap, see [`firestore-nl-query.md`](./firestore-nl-query.md).
-
 ## Inspiration
 
 This project draws inspiration from **[Query Studio (db-lang)](https://github.com/iamEtornam/db-lang)** by [iamEtornam](https://github.com/iamEtornam) — a native, **AI-driven database tool that bridges natural language and SQL** across PostgreSQL, MySQL, SQLite, and MSSQL. **Firestore Query Studio** applies a similar *describe what you want → structured query → results table* workflow to **Google Cloud Firestore**, with a Zod-validated plan DSL, Firebase Admin SDK / emulator support, and a read-only Phase 1 scope.
@@ -339,7 +337,7 @@ Report security issues responsibly — see [`SECURITY.md`](./SECURITY.md) for th
 
 ## Roadmap
 
-High level (see also `firestore-nl-query.md`):
+High level:
 
 - **Phase 2** — explicit write mode, allowlists, safer mutations, seed data workflows.
 - **Phase 3** — Firebase Storage exploration.

@@ -81,6 +81,6 @@ Pre-1.0: there is no strict cadence. A release will be cut when a meaningful bat
 
 ## Project scope reminder
 
-Phase 1 is **read-only**. Proposals that add mutation paths (writes, deletes, seeding) will usually be deferred to Phase 2 — that is intentional. See [`firestore-nl-query.md`](./firestore-nl-query.md) for the phased vision.
+Phase 1 is **read-only**. Proposals that add mutation paths (writes, deletes, seeding) will usually be deferred to Phase 2 — that is intentional. See the **Roadmap** section in [`README.md`](./README.md) for phased goals.
 
 Thanks again — see you in the issue tracker.

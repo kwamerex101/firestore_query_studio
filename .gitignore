@@ -38,3 +38,6 @@ Desktop.ini
 
 # Local credentials (e.g. Firebase service-account JSON) — never commit
 keys/
+
+# Local product notes / vision doc (not distributed with the repo)
+firestore-nl-query.md
