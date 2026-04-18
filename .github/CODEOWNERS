@@ -1,0 +1,9 @@
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Used when branch protection has "Require review from Code Owners".
+# Each pattern is owned by the listed user(s) or team(s); PRs touching those
+# paths need approval from an owner.
+#
+# Replace @rexdanquah with your GitHub username if it differs.
+
+* @kwamerex101

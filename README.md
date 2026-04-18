@@ -6,10 +6,15 @@
 
 For the original product vision and phased roadmap, see [`firestore-nl-query.md`](./firestore-nl-query.md).
 
+## Inspiration
+
+This project draws inspiration from **[Query Studio (db-lang)](https://github.com/iamEtornam/db-lang)** by [iamEtornam](https://github.com/iamEtornam) — a native, **AI-driven database tool that bridges natural language and SQL** across PostgreSQL, MySQL, SQLite, and MSSQL. **Firestore Query Studio** applies a similar *describe what you want → structured query → results table* workflow to **Google Cloud Firestore**, with a Zod-validated plan DSL, Firebase Admin SDK / emulator support, and a read-only Phase 1 scope.
+
 ---
 
 ## Table of contents
 
+- [Inspiration](#inspiration)
 - [Why use this](#why-use-this)
 - [Features](#features)
 - [Tech stack](#tech-stack)
@@ -41,20 +46,22 @@ For the original product vision and phased roadmap, see [`firestore-nl-query.md`
 
 ## Features
 
-| Area | What you get |
-|------|----------------|
-| **Connections** | **Live** projects via service-account JSON (path only, never copied into profile blobs) or **Firestore emulator** (host/port). |
-| **Environment awareness** | Profiles carry a **dev / staging / prod** tag shown in the header so you always know what you are pointed at. |
-| **Natural language → plan** | LLM proposes a **`QueryPlan`**: collection, filters, order, limits, optional scan or multi-step flow. |
-| **Two planner backends** | **OpenAI-compatible HTTP** (`/chat/completions`) or **Cursor CLI** (`cursor-agent` and friends)—selectable as the active **provider**. |
-| **Schema grounding** | Samples up to **N** documents per collection (configurable `sampleSize`), infers field names/types, caches results; you can **override** schema text per collection. |
-| **Execution** | Main process runs **Admin SDK** queries; enforces **scan caps**; maps **`FAILED_PRECONDITION`** to a **“Create composite index”** link when the console URL is present. |
-| **Results** | **TanStack Table**: sort, virtualized rows, JSON/CSV export, copy document paths, warnings for truncated scans. |
-| **Explain & insights** | **Explain** tab: plan JSON, rationale, pseudo Firestore SDK code. **Insights** tab: optional LLM summary of the result set (same provider rules as planning). |
-| **History** | Per-profile **query history** (question, collection, plan snapshot, outcome); reopen a run into the Query tab. |
-| **Settings** | OpenAI-compatible **base URL**, **model**, **API key**, **request timeout**, **warm-up** (local servers). |
-| **Cursor** | **Cursor CLI** command, model, mode, timeout, env, tests—and the **toggle** that selects **OpenAI-compatible** vs **Cursor CLI** as the active planner backend. |
-| **Desktop shell** | **Electron** + **Vite**; renderer uses **strict CSP** (see [`src/renderer/index.html`](./src/renderer/index.html)); sensitive values use **`safeStorage`** with a documented plain-file fallback on some Linux setups. |
+
+| Area                        | What you get                                                                                                                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Connections**             | **Live** projects via service-account JSON (path only, never copied into profile blobs) or **Firestore emulator** (host/port).                                                                                         |
+| **Environment awareness**   | Profiles carry a **dev / staging / prod** tag shown in the header so you always know what you are pointed at.                                                                                                          |
+| **Natural language → plan** | LLM proposes a `**QueryPlan`**: collection, filters, order, limits, optional scan or multi-step flow.                                                                                                                  |
+| **Two planner backends**    | **OpenAI-compatible HTTP** (`/chat/completions`) or **Cursor CLI** (`cursor-agent` and friends)—selectable as the active **provider**.                                                                                 |
+| **Schema grounding**        | Samples up to **N** documents per collection (configurable `sampleSize`), infers field names/types, caches results; you can **override** schema text per collection.                                                   |
+| **Execution**               | Main process runs **Admin SDK** queries; enforces **scan caps**; maps `**FAILED_PRECONDITION`** to a **“Create composite index”** link when the console URL is present.                                                |
+| **Results**                 | **TanStack Table**: sort, virtualized rows, JSON/CSV export, copy document paths, warnings for truncated scans.                                                                                                        |
+| **Explain & insights**      | **Explain** tab: plan JSON, rationale, pseudo Firestore SDK code. **Insights** tab: optional LLM summary of the result set (same provider rules as planning).                                                          |
+| **History**                 | Per-profile **query history** (question, collection, plan snapshot, outcome); reopen a run into the Query tab.                                                                                                         |
+| **Settings**                | OpenAI-compatible **base URL**, **model**, **API key**, **request timeout**, **warm-up** (local servers).                                                                                                              |
+| **Cursor**                  | **Cursor CLI** command, model, mode, timeout, env, tests—and the **toggle** that selects **OpenAI-compatible** vs **Cursor CLI** as the active planner backend.                                                        |
+| **Desktop shell**           | **Electron** + **Vite**; renderer uses **strict CSP** (see `[src/renderer/index.html](./src/renderer/index.html)`); sensitive values use `**safeStorage`** with a documented plain-file fallback on some Linux setups. |
+
 
 ---
 
@@ -71,13 +78,15 @@ For the original product vision and phased roadmap, see [`firestore-nl-query.md`
 
 ## Prerequisites
 
-| Requirement | Notes |
-|-------------|--------|
-| **Node.js 20+** | Matches `engines` in `package.json`. |
-| **pnpm** | `corepack enable && corepack prepare pnpm@latest --activate` or `npm i -g pnpm`. |
-| **Java 11+** | Only if you run **`pnpm test:emulator`** or start the Firestore emulator yourself. |
-| **Firebase CLI** | Only for **`pnpm test:emulator`** or local emulator workflows: `npm i -g firebase-tools`. |
+
+| Requirement               | Notes                                                                                                                                                                |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Node.js 20+**           | Matches `engines` in `package.json`.                                                                                                                                 |
+| **pnpm**                  | `corepack enable && corepack prepare pnpm@latest --activate` or `npm i -g pnpm`.                                                                                     |
+| **Java 11+**              | Only if you run `**pnpm test:emulator`** or start the Firestore emulator yourself.                                                                                   |
+| **Firebase CLI**          | Only for `**pnpm test:emulator`** or local emulator workflows: `npm i -g firebase-tools`.                                                                            |
 | **Cursor CLI (optional)** | If you use the **Cursor CLI** provider, install the Cursor CLI / `cursor-agent` per [Cursor’s docs](https://cursor.com/docs) and configure it on the **Cursor** tab. |
+
 
 **Native modules:** `electron` and `keytar` may compile on install. This repo uses `pnpm.onlyBuiltDependencies` so installs stay non-interactive where possible.
 
@@ -102,17 +111,19 @@ pnpm dev
 
 ## Scripts reference
 
-| Script | Purpose |
-|--------|---------|
-| `pnpm dev` | Development: Electron + Vite HMR. |
-| `pnpm build` | Production bundle → `out/main`, `out/preload`, `out/renderer`. |
-| `pnpm start` | `electron-vite preview` (preview production build). |
-| `pnpm test` | Unit tests (no emulator, no network). |
-| `pnpm test:watch` | Vitest watch mode. |
+
+| Script               | Purpose                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `pnpm dev`           | Development: Electron + Vite HMR.                                                             |
+| `pnpm build`         | Production bundle → `out/main`, `out/preload`, `out/renderer`.                                |
+| `pnpm start`         | `electron-vite preview` (preview production build).                                           |
+| `pnpm test`          | Unit tests (no emulator, no network).                                                         |
+| `pnpm test:watch`    | Vitest watch mode.                                                                            |
 | `pnpm test:emulator` | Integration tests via `firebase emulators:exec --only firestore` (needs Java + Firebase CLI). |
-| `pnpm typecheck` | `tsc --noEmit` for Node (main/preload) and web (renderer) projects. |
-| `pnpm lint` | ESLint on `ts` / `tsx`. |
-| `pnpm format` | Prettier write for `src` and `tests`. |
+| `pnpm typecheck`     | `tsc --noEmit` for Node (main/preload) and web (renderer) projects.                           |
+| `pnpm lint`          | ESLint on `ts` / `tsx`.                                                                       |
+| `pnpm format`        | Prettier write for `src` and `tests`.                                                         |
+
 
 ---
 
@@ -120,7 +131,7 @@ pnpm dev
 
 ### Emulator (recommended for learning)
 
-1. In another terminal: `firebase emulators:start --only firestore` (from this repo root so [`firebase.json`](./firebase.json) applies).
+1. In another terminal: `firebase emulators:start --only firestore` (from this repo root so `[firebase.json](./firebase.json)` applies).
 2. **Profiles** → **New profile** → **Emulator** → set **Project ID** (any string is fine for local), **Host** `127.0.0.1`, **Port** `8080` (defaults in `firebase.json`).
 3. **Set active**. The banner reflects your **env** tag (e.g. dev).
 
@@ -135,14 +146,14 @@ pnpm dev
 
 ### Profile limits
 
-- **`scanCap`** (default 500, max 50_000): hard ceiling for bounded **scan** mode (client-side filtering after fetching docs).
-- **`sampleSize`** (default 10, max 200): how many documents to read when inferring schema for a collection.
+- `**scanCap`** (default 500, max 50_000): hard ceiling for bounded **scan** mode (client-side filtering after fetching docs).
+- `**sampleSize`** (default 10, max 200): how many documents to read when inferring schema for a collection.
 
 ---
 
 ## LLM configuration
 
-The app stores an **active provider** (`openai-compat` | `cursor-cli`) alongside secrets (see [`src/main/profiles/secrets.ts`](./src/main/profiles/secrets.ts)).
+The app stores an **active provider** (`openai-compat` | `cursor-cli`) alongside secrets (see `[src/main/profiles/secrets.ts](./src/main/profiles/secrets.ts)`).
 
 ### OpenAI-compatible (HTTP)
 
@@ -150,7 +161,7 @@ The app stores an **active provider** (`openai-compat` | `cursor-cli`) alongside
 
 - **Base URL** — e.g. `https://api.openai.com/v1` or `http://127.0.0.1:11434/v1` (Ollama). The client appends `/chat/completions`.
 - **Model** — e.g. `gpt-4o-mini`, or a local model name.
-- **API key** — optional for some local servers; required for most cloud APIs. Stored with **`safeStorage`** when the OS supports it.
+- **API key** — optional for some local servers; required for most cloud APIs. Stored with `**safeStorage`** when the OS supports it.
 - **Request timeout** — default 30s; **raise** for slow local models (60–300s is common). When timeout ≥ 60s, the HTTP client uses **fewer retries** so a bad run does not multiply wait time.
 - **Warm up model** — sends a tiny completion to reduce **cold start** latency on Ollama / LM Studio. After **Save**, a silent warm-up runs if the base URL looks **local**.
 
@@ -160,7 +171,7 @@ The app stores an **active provider** (`openai-compat` | `cursor-cli`) alongside
 
 **Cursor** tab:
 
-- Configure **`cursor-agent`** (or your wrapper), **model**, **mode** (`default` | `plan` | `ask`), optional **cwd**, **extra args**, **environment** key/value lines, and **timeout** (default 60s).
+- Configure `**cursor-agent`** (or your wrapper), **model**, **mode** (`default` | `plan` | `ask`), optional **cwd**, **extra args**, **environment** key/value lines, and **timeout** (default 60s).
 - Use **Test** / **List models** to verify the binary is on `PATH` and responding.
 - After a successful **Test** and **Save**, enable **Use Cursor CLI as the planner backend** so planning and insights use the CLI.
 
@@ -174,18 +185,20 @@ When **Cursor CLI** is the active provider, **plan** and **insights** calls go t
 
 Switching tabs does **not** unmount panels: in-flight **Build plan** / **Run** work and your draft question **persist** while you peek at Settings or Profiles.
 
-| Tab | Role |
-|-----|------|
-| **Query** | NL question, collection picker, plan + run, results, Explain / Insights / Schema. |
-| **History** | Per-profile history; reopen entries into Query. |
-| **Profiles** | CRUD profiles, active profile, env tag, caps, help links for Project ID / service account JSON. |
-| **Cursor** | Cursor CLI configuration, model listing, smoke test, and **switch active provider** (HTTP ↔ CLI). |
-| **Settings** | OpenAI-compatible HTTP LLM fields (used when the active provider is not Cursor CLI). |
+
+| Tab          | Role                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| **Query**    | NL question, collection picker, plan + run, results, Explain / Insights / Schema.                 |
+| **History**  | Per-profile history; reopen entries into Query.                                                   |
+| **Profiles** | CRUD profiles, active profile, env tag, caps, help links for Project ID / service account JSON.   |
+| **Cursor**   | Cursor CLI configuration, model listing, smoke test, and **switch active provider** (HTTP ↔ CLI). |
+| **Settings** | OpenAI-compatible HTTP LLM fields (used when the active provider is not Cursor CLI).              |
+
 
 ### Typical flow
 
 1. **Sample schema** (implicit when you use a collection): first time, the app may sample documents so the LLM sees real field names.
-2. **Build plan** — validates JSON → **`QueryPlan`** via Zod.
+2. **Build plan** — validates JSON → `**QueryPlan`** via Zod.
 3. **Run** — executor talks to Firestore; errors with index URLs surface a button to the Firebase console.
 4. **Insights** (optional) — second LLM pass over a compact summary of rows (bounded input); uses the same **active provider**.
 
@@ -193,11 +206,11 @@ Switching tabs does **not** unmount panels: in-flight **Build plan** / **Run** w
 
 ## Query plans: query, scan, and multi
 
-- **`query`** — Normal Firestore `collection().where().orderBy().limit()` style execution when inequalities and indexes line up.
-- **`scan`** — For patterns Firestore cannot express (e.g. some substring / case-folding / richer post-filters), the executor may read up to **`min(plan.scanCap, profile.scanCap)`** documents and apply **`postFilters`** in Node. UI shows **warnings** when caps truncate work.
-- **`multi`** — Multiple steps (e.g. resolve an ID then query another collection); executor runs steps, merges rows, and reports per-step stats.
+- `**query`** — Normal Firestore `collection().where().orderBy().limit()` style execution when inequalities and indexes line up.
+- `**scan**` — For patterns Firestore cannot express (e.g. some substring / case-folding / richer post-filters), the executor may read up to `**min(plan.scanCap, profile.scanCap)**` documents and apply `**postFilters**` in Node. UI shows **warnings** when caps truncate work.
+- `**multi`** — Multiple steps (e.g. resolve an ID then query another collection); executor runs steps, merges rows, and reports per-step stats.
 
-The LLM is instructed with Firestore constraints (single inequality field per query, index needs, optional collection group semantics) in [`src/main/llm/prompts/queryPlanSystem.ts`](./src/main/llm/prompts/queryPlanSystem.ts).
+The LLM is instructed with Firestore constraints (single inequality field per query, index needs, optional collection group semantics) in `[src/main/llm/prompts/queryPlanSystem.ts](./src/main/llm/prompts/queryPlanSystem.ts)`.
 
 ---
 
@@ -259,36 +272,40 @@ flowchart TB
   Insights --> Provider
 ```
 
-**IPC:** every channel is declared in [`src/shared/ipc-api.ts`](./src/shared/ipc-api.ts) with **Zod** request/response shapes. The main router validates before executing ([`src/main/ipc/router.ts`](./src/main/ipc/router.ts)).
+
+
+**IPC:** every channel is declared in `[src/shared/ipc-api.ts](./src/shared/ipc-api.ts)` with **Zod** request/response shapes. The main router validates before executing (`[src/main/ipc/router.ts](./src/main/ipc/router.ts)`).
 
 ---
 
 ## Project layout
 
-| Path | Responsibility |
-|------|------------------|
-| `src/shared/types/plan.ts` | `QueryPlan` Zod schema — contract between planner and executor. |
-| `src/shared/types/profile.ts` | Profiles, `LlmSettings`, `CursorSettings`, `LlmProvider`. |
-| `src/shared/types/schema.ts` | `CollectionSchema` inference + overrides. |
-| `src/shared/types/results.ts` | `RunOutcome`, stats, warnings, index hints. |
-| `src/shared/types/history.ts` | History entry / summary types. |
-| `src/shared/types/ipc.ts` | Channel names + payload schemas. |
-| `src/shared/ipc-api.ts` | Maps channels → Zod in/out for compile-time safety. |
-| `src/main/index.ts` | Electron app entry, window, IPC registration. |
-| `src/main/ipc/router.ts` | IPC handlers. |
-| `src/main/profiles/profileStore.ts` | Profile JSON on disk (no secrets). |
-| `src/main/profiles/secrets.ts` | Encrypted blob: LLM settings, provider, Cursor settings. |
-| `src/main/firestore/*` | Admin client, connection manager, executor, sampler, cache, index parser. |
-| `src/main/llm/openaiCompat.ts` | BYOK HTTP client (timeout, retries). |
-| `src/main/llm/cursorCli.ts` | Cursor CLI subprocess / streaming adapter. |
-| `src/main/llm/planner.ts` | Prompt + provider branch + JSON extraction + validation. |
-| `src/main/llm/insights.ts` | Post-query insights prompt path. |
-| `src/main/history/historyStore.ts` | Per-profile history persistence. |
-| `src/preload/index.ts` | `contextBridge` API surface. |
-| `src/renderer/app/*` | Pages and panels (`QueryPage`, `HistoryPage`, `ResultsTable`, …). |
-| `src/renderer/state/AppState.tsx` | Global React context for profiles, secrets handles, provider, history handoff. |
-| `tests/unit/*` | Fast unit tests. |
-| `tests/integration/*` | Emulator-backed tests (`vitest.emulator.config.ts`). |
+
+| Path                                | Responsibility                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------ |
+| `src/shared/types/plan.ts`          | `QueryPlan` Zod schema — contract between planner and executor.                |
+| `src/shared/types/profile.ts`       | Profiles, `LlmSettings`, `CursorSettings`, `LlmProvider`.                      |
+| `src/shared/types/schema.ts`        | `CollectionSchema` inference + overrides.                                      |
+| `src/shared/types/results.ts`       | `RunOutcome`, stats, warnings, index hints.                                    |
+| `src/shared/types/history.ts`       | History entry / summary types.                                                 |
+| `src/shared/types/ipc.ts`           | Channel names + payload schemas.                                               |
+| `src/shared/ipc-api.ts`             | Maps channels → Zod in/out for compile-time safety.                            |
+| `src/main/index.ts`                 | Electron app entry, window, IPC registration.                                  |
+| `src/main/ipc/router.ts`            | IPC handlers.                                                                  |
+| `src/main/profiles/profileStore.ts` | Profile JSON on disk (no secrets).                                             |
+| `src/main/profiles/secrets.ts`      | Encrypted blob: LLM settings, provider, Cursor settings.                       |
+| `src/main/firestore/*`              | Admin client, connection manager, executor, sampler, cache, index parser.      |
+| `src/main/llm/openaiCompat.ts`      | BYOK HTTP client (timeout, retries).                                           |
+| `src/main/llm/cursorCli.ts`         | Cursor CLI subprocess / streaming adapter.                                     |
+| `src/main/llm/planner.ts`           | Prompt + provider branch + JSON extraction + validation.                       |
+| `src/main/llm/insights.ts`          | Post-query insights prompt path.                                               |
+| `src/main/history/historyStore.ts`  | Per-profile history persistence.                                               |
+| `src/preload/index.ts`              | `contextBridge` API surface.                                                   |
+| `src/renderer/app/*`                | Pages and panels (`QueryPage`, `HistoryPage`, `ResultsTable`, …).              |
+| `src/renderer/state/AppState.tsx`   | Global React context for profiles, secrets handles, provider, history handoff. |
+| `tests/unit/*`                      | Fast unit tests.                                                               |
+| `tests/integration/*`               | Emulator-backed tests (`vitest.emulator.config.ts`).                           |
+
 
 ---
 
@@ -300,21 +317,23 @@ flowchart TB
 - **CSP** in the renderer restricts script and connect defaults; LLM and Firestore traffic originate from the **main process** (`fetch` / Admin SDK), not from the renderer’s origin.
 - **Read-only MVP** reduces risk: there is no write path to misconfigure in Phase 1.
 
-Report security issues responsibly (see [Contributing](#contributing) for contact guidance once you publish the repo).
+Report security issues responsibly — see [`SECURITY.md`](./SECURITY.md) for the private disclosure channel. Please do **not** open public GitHub issues for exploitable bugs.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Things to check |
-|---------|------------------|
-| **`pnpm test:emulator` fails** | Java on `PATH`, `firebase` CLI installed, port 8080 free. |
-| **Plan timeouts with local LLM** | Increase **timeout** in Settings; use **Warm up model**; prefer a smaller model or GPU offload. |
-| **`LLM_NOT_CONFIGURED`** | Open **Settings**, save base URL + key (HTTP mode), or switch provider / configure **Cursor** tab. |
-| **`CURSOR_NOT_CONFIGURED`** | Select Cursor provider only after saving Cursor tab settings. |
-| **Composite index errors** | Use the in-app link to open the Firebase console index builder. |
-| **Linux keychain / keytar** | May need platform packages for secret storage; app falls back to a chmod `0600` file and logs a warning. |
-| **CSP console noise** | Rare; renderer CSP is in `src/renderer/index.html`. Main-process `fetch` is not subject to that meta tag. |
+
+| Symptom                          | Things to check                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `**pnpm test:emulator` fails**   | Java on `PATH`, `firebase` CLI installed, port 8080 free.                                                 |
+| **Plan timeouts with local LLM** | Increase **timeout** in Settings; use **Warm up model**; prefer a smaller model or GPU offload.           |
+| `**LLM_NOT_CONFIGURED`**         | Open **Settings**, save base URL + key (HTTP mode), or switch provider / configure **Cursor** tab.        |
+| `**CURSOR_NOT_CONFIGURED`**      | Select Cursor provider only after saving Cursor tab settings.                                             |
+| **Composite index errors**       | Use the in-app link to open the Firebase console index builder.                                           |
+| **Linux keychain / keytar**      | May need platform packages for secret storage; app falls back to a chmod `0600` file and logs a warning.  |
+| **CSP console noise**            | Rare; renderer CSP is in `src/renderer/index.html`. Main-process `fetch` is not subject to that meta tag. |
+
 
 ---
 
@@ -331,27 +350,26 @@ High level (see also `firestore-nl-query.md`):
 
 ## Contributing
 
-Contributions are welcome: bug reports, docs, tests, and focused PRs.
+Contributions are welcome: bug reports, docs, tests, and focused PRs. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full guide.
 
-1. **Fork** the repository and create a branch from `main` (or the default branch).
-2. **`pnpm install`** → **`pnpm typecheck`** → **`pnpm test`** before opening a PR.
+Quick version:
+
+1. **Fork** the repository and create a branch from `main`.
+2. `pnpm install` → `pnpm typecheck` → `pnpm test` before opening a PR.
 3. If you change IPC or shared Zod schemas, update **both** main and preload/renderer clients and add/adjust tests.
 4. Keep PRs **small and descriptive**; match existing formatting (`pnpm format`).
+5. PRs run CI automatically (`.github/workflows/ci.yml`): typecheck + unit tests. `main` is protected and needs a review before merging.
 
-**Security:** please do not file exploitable issues as public GitHub issues before maintainers can patch—use a private security advisory or email if you publish a `SECURITY.md` with contact details.
+**Security:** do not file exploitable issues as public GitHub issues — see [`SECURITY.md`](./SECURITY.md) for the private disclosure channel.
 
 ---
 
 ## License
 
-This repository is intended to be **open source**, but **does not yet ship a `LICENSE` file** in-tree. Before you publish:
+This project is licensed under the **MIT License** — see `[LICENSE](./LICENSE)`.
 
-1. Add a license file at the repo root (e.g. **MIT**, **Apache-2.0**, or **AGPL-3.0**—choose deliberately if SaaS wrapping matters).
-2. Set `"license": "MIT"` (or your choice) in `package.json` and remove `"private": true` when you are ready to publish to npm (optional).
-
-Until then, **all rights are reserved** by default under copyright law; the README alone does not grant reuse rights.
+`package.json` declares `"license": "MIT"`. The package remains `"private": true` so it is not accidentally published to npm; remove that field when (and if) you publish the app as a package.
 
 ---
 
 **Disclaimer:** *Firestore Query Studio is not affiliated with Google LLC. Firebase and Firestore are trademarks of Google LLC.*
-# firestore_query_studio

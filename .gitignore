@@ -1,0 +1,40 @@
+# Dependencies & build output
+node_modules
+out
+dist
+release
+
+# Logs & caches
+*.log
+pnpm-debug.log*
+npm-debug.log*
+yarn-error.log*
+.eslintcache
+.vite
+
+# TypeScript incremental (tsc --build / composite)
+*.tsbuildinfo
+
+# Env & secrets (never commit real values; add .env.example for docs if needed)
+.env
+.env.local
+.env.*.local
+
+# Tests & coverage
+coverage
+
+# Firebase CLI (hosting cache / local state if you add more emulator features)
+.firebase
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors (remove .vscode from this list if you want shared workspace settings in git)
+.vscode
+.idea
+
+# Local credentials (e.g. Firebase service-account JSON) — never commit
+keys/
