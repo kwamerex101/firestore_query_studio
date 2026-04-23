@@ -48,7 +48,8 @@ function formatRelativeTime(ts: number): string {
 }
 
 export function QueryPage() {
-  const { activeProfile, llm, pendingHistory, clearPendingHistory } = useAppState();
+  const { activeProfile, llm, pendingHistory, clearPendingHistory, notifyHistoryChanged } =
+    useAppState();
   const toast = useToast();
   const [question, setQuestion] = useState('');
   const [collections, setCollections] = useState<string[]>([]);
@@ -174,6 +175,7 @@ export function QueryPage() {
             plan: p,
             outcome: res,
           });
+          notifyHistoryChanged();
         } catch (historyErr) {
           // Non-fatal: history persistence should never block the user.
           // eslint-disable-next-line no-console
@@ -280,6 +282,7 @@ export function QueryPage() {
    */
   const canReuseCached =
     cachedEntry !== null &&
+    isFirestoreHistoryEntry(cachedEntry) &&
     (plan === null ||
       planContext?.question !== cachedEntry.question ||
       planContext?.collection !== cachedEntry.collection ||

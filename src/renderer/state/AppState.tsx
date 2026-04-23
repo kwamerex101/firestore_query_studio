@@ -46,6 +46,12 @@ interface AppStateValue {
   pendingHistory: HistoryEntry | null;
   loadHistoryEntry(entry: HistoryEntry): void;
   clearPendingHistory(): void;
+  /**
+   * Bumps when a new history entry is persisted (Firestore or SQL). History
+   * tab subscribes to refetch without manual refresh.
+   */
+  historyEpoch: number;
+  notifyHistoryChanged(): void;
 }
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -64,6 +70,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [provider, setProviderState] = useState<LlmProvider>('openai-compat');
   const [loading, setLoading] = useState(true);
   const [pendingHistory, setPendingHistory] = useState<HistoryEntry | null>(null);
+  const [historyEpoch, setHistoryEpoch] = useState(0);
+
+  const notifyHistoryChanged = useCallback(() => {
+    setHistoryEpoch((n) => n + 1);
+  }, []);
 
   const loadHistoryEntry = useCallback((entry: HistoryEntry) => {
     setPendingHistory(entry);
@@ -169,6 +180,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       pendingHistory,
       loadHistoryEntry,
       clearPendingHistory,
+      historyEpoch,
+      notifyHistoryChanged,
     }),
     [
       profiles,
@@ -190,6 +203,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       pendingHistory,
       loadHistoryEntry,
       clearPendingHistory,
+      historyEpoch,
+      notifyHistoryChanged,
     ],
   );
 

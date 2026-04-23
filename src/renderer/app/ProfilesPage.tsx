@@ -38,7 +38,7 @@ import { useToast } from '../components/ui/toast';
 import { ServiceAccountPicker } from '../components/ServiceAccountPicker';
 import { FirebaseWebConfigDialog } from '../components/FirebaseWebConfigDialog';
 import { capabilities, ipc } from '../lib/ipcClient';
-import { explainSqlProbeError } from '../lib/probeErrorExplain';
+import { explainSqlProbeError } from '@shared/probeErrorExplain';
 import { cn } from '../lib/utils';
 
 type FormState = {

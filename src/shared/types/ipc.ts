@@ -698,7 +698,6 @@ export const ExportStartOutcome = z.discriminatedUnion('ok', [
 export type ExportStartOutcome = z.infer<typeof ExportStartOutcome>;
 
 export { SqlColumn, SqlRow, SqlExecuteOk, SqlExecuteErr, SqlExecuteOutcome } from './sqlExecute';
-export type { SqlColumn, SqlRow, SqlExecuteOutcome } from './sqlExecute';
 
 /**
  * Sample a single relational table for schema + a handful of rows. Used

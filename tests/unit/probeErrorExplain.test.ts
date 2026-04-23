@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { explainSqlProbeError } from '../../src/renderer/lib/probeErrorExplain';
+import { explainSqlProbeError } from '@shared/probeErrorExplain';
 
 describe('explainSqlProbeError', () => {
   it('explains PostgreSQL pg_hba / 28000 and SSL hint when message says no encryption', () => {

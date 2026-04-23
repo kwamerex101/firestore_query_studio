@@ -35,7 +35,7 @@ type TabKey = 'plan' | 'rationale';
  */
 export function SqlQueryPanel({ profile, hasLlmConfigured }: SqlQueryPanelProps) {
   const toast = useToast();
-  const { pendingHistory, clearPendingHistory } = useAppState();
+  const { pendingHistory, clearPendingHistory, notifyHistoryChanged } = useAppState();
   const [question, setQuestion] = useState('');
   const [tables, setTables] = useState<DbContainer[]>([]);
   const [table, setTable] = useState<string>('');
@@ -148,6 +148,7 @@ export function SqlQueryPanel({ profile, hasLlmConfigured }: SqlQueryPanelProps)
           sqlPlan: sqlPlanForHistory,
           outcome: res,
         });
+        notifyHistoryChanged();
       } catch (historyErr) {
         // eslint-disable-next-line no-console
         console.warn('Failed to save history entry', historyErr);

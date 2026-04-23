@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type {
+  AddHistoryEntryInput,
   HistoryEntry,
   HistorySummary,
 } from '@shared/types/history';
@@ -124,7 +125,7 @@ export async function getHistoryEntry(
 
 export async function addHistoryEntry(
   profileId: string,
-  input: Omit<HistoryEntry, 'id' | 'profileId' | 'createdAt' | 'rowsTruncated'>,
+  input: AddHistoryEntryInput,
 ): Promise<HistoryEntry> {
   const file = await readFile(profileId);
   const base = {

@@ -98,3 +98,11 @@ export const HistorySummary = z.object({
   sqlPreview: z.string().optional(),
 });
 export type HistorySummary = z.infer<typeof HistorySummary>;
+
+/**
+ * Payload for `addHistoryEntry` (no generated id/timestamps). Use a union so
+ * TypeScript does not merge Firestore + SQL fields into an impossible type.
+ */
+export type AddHistoryEntryInput =
+  | Omit<SqlHistoryEntry, 'id' | 'profileId' | 'createdAt' | 'rowsTruncated'>
+  | Omit<FirestoreHistoryEntry, 'id' | 'profileId' | 'createdAt' | 'rowsTruncated'>;

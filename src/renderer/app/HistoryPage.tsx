@@ -71,7 +71,7 @@ function groupByDay(entries: HistorySummary[]): Array<{ label: string; items: Hi
 }
 
 export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery: () => void }) {
-  const { activeProfile, loadHistoryEntry } = useAppState();
+  const { activeProfile, loadHistoryEntry, historyEpoch } = useAppState();
   const toast = useToast();
   const [entries, setEntries] = useState<HistorySummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -98,7 +98,7 @@ export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, historyEpoch]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
