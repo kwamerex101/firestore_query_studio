@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Firestore Query Studio</title>
+    <!--
+      Web/PWA CSP. The Electron build uses a much stricter CSP in
+      [src/renderer/index.html](../src/renderer/index.html); we can't reuse
+      it verbatim because the browser build must talk to Firebase and
+      user-configured OpenAI-compatible endpoints directly.
+
+      In production you should ALSO send these as HTTP response headers from
+      the hosting provider — the meta tag is a safety net, not a substitute.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'wasm-unsafe-eval';
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https:;
+        font-src 'self' data:;
+        worker-src 'self' blob:;
+        connect-src 'self'
+          http://localhost:* ws://localhost:*
+          https://*.googleapis.com
+          https://*.firebaseio.com
+          wss://*.firebaseio.com
+          https://firestore.googleapis.com
+          https://identitytoolkit.googleapis.com
+          https://securetoken.googleapis.com
+          https://*.openai.com
+          https://api.anthropic.com
+          https://api.mistral.ai
+          https://generativelanguage.googleapis.com
+          https://api.together.xyz
+          https://api.groq.com;
+      "
+    />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b0b0b" />
+    <meta name="description" content="Query Firestore with natural language." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

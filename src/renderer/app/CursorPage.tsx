@@ -44,7 +44,7 @@ function parseEnvVars(text: string): Record<string, string> {
   return env;
 }
 
-export function CursorPage() {
+export function CursorSettingsSection() {
   const {
     cursor,
     provider,
@@ -177,227 +177,224 @@ export function CursorPage() {
   }, [models, model]);
 
   return (
-    <div className="h-full overflow-auto p-6 animate-fade-in">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-1 flex items-center gap-2">
-          <Terminal size={16} />
-          <h1 className="text-lg font-semibold tracking-tight">Cursor Agent CLI</h1>
+    <div className="animate-fade-in">
+      <div className="mb-1 flex items-center gap-2">
+        <Terminal size={16} />
+        <h2 className="text-lg font-semibold tracking-tight">Cursor Agent CLI</h2>
+      </div>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Use Cursor&apos;s Agent CLI for query planning instead of the OpenAI-compatible endpoint
+        from the LLM section. Settings here are stored with Electron safeStorage.
+      </p>
+
+      <div className="mb-4 rounded-md border border-border bg-secondary/60 p-4 text-sm text-muted-foreground animate-fade-in-up">
+        <div className="mb-2 font-medium text-foreground">Getting the CLI working</div>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            In a terminal, install:{' '}
+            <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
+              curl https://cursor.com/install -fsSL | bash
+            </code>
+          </li>
+          <li>
+            Open a <strong>new</strong> terminal tab, then sign in:{' '}
+            <code className="rounded bg-background/80 px-1 py-0.5 text-xs">cursor-agent login</code>{' '}
+            (complete the flow in your browser).
+          </li>
+          <li>
+            Confirm it runs:{' '}
+            <code className="rounded bg-background/80 px-1 py-0.5 text-xs">cursor-agent --version</code>
+            . If that fails, open a new shell or run{' '}
+            <code className="rounded bg-background/80 px-1 py-0.5 text-xs">source ~/.zshrc</code>.
+          </li>
+          <li>
+            Paste the full path from{' '}
+            <code className="rounded bg-background/80 px-1 py-0.5 text-xs">which cursor-agent</code>{' '}
+            into <strong>CLI command</strong> below. Electron often does not see the same{' '}
+            <code>PATH</code> as your interactive shell, so a full path is the most reliable.
+          </li>
+          <li>
+            Use <strong>Test</strong>, then <strong>Save</strong>, then enable &quot;Use Cursor CLI
+            as the planner backend&quot;. After changing the install or preload, fully quit and
+            restart the app (<code>pnpm dev</code>) if something still looks stuck.
+          </li>
+        </ol>
+      </div>
+
+      <div className="card mb-4 flex items-center justify-between gap-3 animate-fade-in-up">
+        <div>
+          <div className="text-sm font-medium">Use Cursor CLI as the planner backend</div>
+          <div className="text-xs text-muted-foreground">
+            When off, the OpenAI-compatible endpoint from the LLM section is used.
+          </div>
         </div>
-        <p className="mb-3 text-sm text-muted-foreground">
-          Use Cursor&apos;s Agent CLI for query planning instead of the OpenAI-compatible endpoint
-          from Settings. Settings on this page are stored with Electron safeStorage.
-        </p>
+        <label className="flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={useCursor}
+            onChange={(e) => void onToggleProvider(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span className="text-xs text-muted-foreground">
+            Active: <strong>{provider === 'cursor-cli' ? 'Cursor CLI' : 'OpenAI-compatible'}</strong>
+          </span>
+        </label>
+      </div>
 
-        <div className="mb-4 rounded-md border border-border bg-secondary/60 p-4 text-sm text-muted-foreground animate-fade-in-up">
-          <div className="mb-2 font-medium text-foreground">Getting the CLI working</div>
-          <ol className="list-decimal space-y-2 pl-5">
-            <li>
-              In a terminal, install:{' '}
-              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
-                curl https://cursor.com/install -fsSL | bash
-              </code>
-            </li>
-            <li>
-              Open a <strong>new</strong> terminal tab, then sign in:{' '}
-              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">cursor-agent login</code>{' '}
-              (complete the flow in your browser).
-            </li>
-            <li>
-              Confirm it runs:{' '}
-              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">cursor-agent --version</code>
-              . If that fails, open a new shell or run{' '}
-              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">source ~/.zshrc</code>.
-            </li>
-            <li>
-              Paste the full path from{' '}
-              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">which cursor-agent</code>{' '}
-              into <strong>CLI command</strong> below. Electron often does not see the same{' '}
-              <code>PATH</code> as your interactive shell, so a full path is the most reliable.
-            </li>
-            <li>
-              Use <strong>Test</strong>, then <strong>Save</strong>, then enable &quot;Use Cursor CLI
-              as the planner backend&quot;. After changing the install or preload, fully quit and
-              restart the app (<code>pnpm dev</code>) if something still looks stuck.
-            </li>
-          </ol>
-        </div>
-
-        <div className="card mb-4 flex items-center justify-between gap-3 animate-fade-in-up">
-          <div>
-            <div className="text-sm font-medium">Use Cursor CLI as the planner backend</div>
-            <div className="text-xs text-muted-foreground">
-              When off, the OpenAI-compatible endpoint from Settings is used.
-            </div>
-          </div>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={useCursor}
-              onChange={(e) => void onToggleProvider(e.target.checked)}
-              className="h-4 w-4"
-            />
-            <span className="text-xs text-muted-foreground">
-              Active: <strong>{provider === 'cursor-cli' ? 'Cursor CLI' : 'OpenAI-compatible'}</strong>
-            </span>
-          </label>
-        </div>
-
-        <div className="card grid gap-3 animate-fade-in-up">
-          <div>
-            <label className="label">CLI command</label>
-            <div className="flex gap-2">
-              <Input
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder="cursor-agent"
-              />
-              <Button
-                variant="default"
-                onClick={runTest}
-                loading={testing}
-                title="Run `<command> --version` to verify the CLI is installed."
-              >
-                {testing ? 'Testing…' : 'Test'}
-              </Button>
-            </div>
-            {lastTest ? (
-              <p
-                className={
-                  'mt-1 flex items-center gap-1 text-xs ' +
-                  (lastTest.ok ? 'text-env-dev' : 'text-destructive')
-                }
-              >
-                {lastTest.ok ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                {lastTest.ok
-                  ? lastTest.version ?? 'CLI responded'
-                  : `${lastTest.code}: ${lastTest.message}`}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Prefer the full path from <code>which cursor-agent</code> if Test reports &quot;not
-                found&quot;.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="label">Model</label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void refreshModels()}
-                loading={modelsLoading}
-                title="Run `<command> models` to discover installed models."
-              >
-                {!modelsLoading ? <RefreshCcw size={12} /> : null}
-                Refresh
-              </Button>
-            </div>
-            <Select value={model} onChange={(e) => setModel(e.target.value)}>
-              {modelOptions.length === 0 ? (
-                <option value={model || DEFAULT_MODEL}>{model || DEFAULT_MODEL}</option>
-              ) : (
-                modelOptions.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))
-              )}
-            </Select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {models?.source === 'cli'
-                ? 'Models listed by the CLI.'
-                : 'Could not list models from the CLI — showing a built-in fallback list.'}
-              {models?.error ? ` (${models.error})` : ''}
-            </p>
-          </div>
-
-          <div>
-            <label className="label">Mode</label>
-            <div className="flex gap-4 pt-1 text-sm">
-              {(['default', 'plan', 'ask'] as const).map((m) => (
-                <label key={m} className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="cursor-mode"
-                    value={m}
-                    checked={mode === m}
-                    onChange={() => setMode(m)}
-                  />
-                  <span className="capitalize">{m}</span>
-                </label>
-              ))}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              <code>plan</code> and <code>ask</code> map to the CLI <code>--mode</code> flag; leave
-              as <code>default</code> for a normal autonomous run.
-            </p>
-          </div>
-
-          <div>
-            <label className="label">Extra args (comma-separated)</label>
+      <div className="card grid gap-3 animate-fade-in-up">
+        <div>
+          <label className="label">CLI command</label>
+          <div className="flex gap-2">
             <Input
-              value={extraArgs}
-              onChange={(e) => setExtraArgs(e.target.value)}
-              placeholder="--verbose, --max-steps, 3"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              placeholder="cursor-agent"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Passed to the CLI after the built-in flags. <code>--yolo</code> is auto-added if you
-              don&apos;t provide <code>--yolo</code>/<code>--trust</code>/<code>-f</code>.
-            </p>
-          </div>
-
-          <div>
-            <label className="label">Default workspace (cwd)</label>
-            <Input
-              value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
-              placeholder="/absolute/path/to/workspace (optional)"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Passed as <code>--workspace</code> when set. Leave blank to run in the app&apos;s
-              current working directory.
-            </p>
-          </div>
-
-          <div>
-            <label className="label">Environment variables</label>
-            <textarea
-              value={envText}
-              onChange={(e) => setEnvText(e.target.value)}
-              placeholder={'CURSOR_API_KEY=sk-...\nFOO=bar'}
-              className="input min-h-[88px] font-mono"
-              rows={4}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              One <code>KEY=VALUE</code> per line. Stored in your OS keychain via Electron
-              safeStorage. Lines starting with <code>#</code> are ignored.
-            </p>
-          </div>
-
-          <div>
-            <label className="label">Request timeout (seconds)</label>
-            <Input
-              type="number"
-              min={5}
-              max={600}
-              value={timeoutSeconds}
-              onChange={(e) => setTimeoutSeconds(Number(e.target.value))}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              The Cursor CLI can be slow on a cold start; 60s is a sane default.
-            </p>
-          </div>
-
-          <div className="flex justify-end">
-            <Button variant="primary" onClick={save} loading={busy}>
-              {!busy ? <Save size={14} /> : null}
-              {busy ? 'Saving…' : 'Save'}
+            <Button
+              variant="default"
+              onClick={runTest}
+              loading={testing}
+              title="Run `<command> --version` to verify the CLI is installed."
+            >
+              {testing ? 'Testing…' : 'Test'}
             </Button>
           </div>
+          {lastTest ? (
+            <p
+              className={
+                'mt-1 flex items-center gap-1 text-xs ' +
+                (lastTest.ok ? 'text-env-dev' : 'text-destructive')
+              }
+            >
+              {lastTest.ok ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+              {lastTest.ok
+                ? lastTest.version ?? 'CLI responded'
+                : `${lastTest.code}: ${lastTest.message}`}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Prefer the full path from <code>which cursor-agent</code> if Test reports &quot;not
+              found&quot;.
+            </p>
+          )}
         </div>
 
+        <div>
+          <div className="flex items-center justify-between">
+            <label className="label">Model</label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void refreshModels()}
+              loading={modelsLoading}
+              title="Run `<command> models` to discover installed models."
+            >
+              {!modelsLoading ? <RefreshCcw size={12} /> : null}
+              Refresh
+            </Button>
+          </div>
+          <Select value={model} onChange={(e) => setModel(e.target.value)}>
+            {modelOptions.length === 0 ? (
+              <option value={model || DEFAULT_MODEL}>{model || DEFAULT_MODEL}</option>
+            ) : (
+              modelOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))
+            )}
+          </Select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {models?.source === 'cli'
+              ? 'Models listed by the CLI.'
+              : 'Could not list models from the CLI — showing a built-in fallback list.'}
+            {models?.error ? ` (${models.error})` : ''}
+          </p>
+        </div>
+
+        <div>
+          <label className="label">Mode</label>
+          <div className="flex gap-4 pt-1 text-sm">
+            {(['default', 'plan', 'ask'] as const).map((m) => (
+              <label key={m} className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="cursor-mode"
+                  value={m}
+                  checked={mode === m}
+                  onChange={() => setMode(m)}
+                />
+                <span className="capitalize">{m}</span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            <code>plan</code> and <code>ask</code> map to the CLI <code>--mode</code> flag; leave
+            as <code>default</code> for a normal autonomous run.
+          </p>
+        </div>
+
+        <div>
+          <label className="label">Extra args (comma-separated)</label>
+          <Input
+            value={extraArgs}
+            onChange={(e) => setExtraArgs(e.target.value)}
+            placeholder="--verbose, --max-steps, 3"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Passed to the CLI after the built-in flags. <code>--yolo</code> is auto-added if you
+            don&apos;t provide <code>--yolo</code>/<code>--trust</code>/<code>-f</code>.
+          </p>
+        </div>
+
+        <div>
+          <label className="label">Default workspace (cwd)</label>
+          <Input
+            value={cwd}
+            onChange={(e) => setCwd(e.target.value)}
+            placeholder="/absolute/path/to/workspace (optional)"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Passed as <code>--workspace</code> when set. Leave blank to run in the app&apos;s
+            current working directory.
+          </p>
+        </div>
+
+        <div>
+          <label className="label">Environment variables</label>
+          <textarea
+            value={envText}
+            onChange={(e) => setEnvText(e.target.value)}
+            placeholder={'CURSOR_API_KEY=sk-...\nFOO=bar'}
+            className="input min-h-[88px] font-mono"
+            rows={4}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            One <code>KEY=VALUE</code> per line. Stored in your OS keychain via Electron
+            safeStorage. Lines starting with <code>#</code> are ignored.
+          </p>
+        </div>
+
+        <div>
+          <label className="label">Request timeout (seconds)</label>
+          <Input
+            type="number"
+            min={5}
+            max={600}
+            value={timeoutSeconds}
+            onChange={(e) => setTimeoutSeconds(Number(e.target.value))}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            The Cursor CLI can be slow on a cold start; 60s is a sane default.
+          </p>
+        </div>
+
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={save} loading={busy}>
+            {!busy ? <Save size={14} /> : null}
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
       </div>
     </div>
   );

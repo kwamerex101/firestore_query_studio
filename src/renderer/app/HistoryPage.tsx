@@ -9,8 +9,18 @@ import {
   FileText,
   Search,
   Database,
+  Flame,
 } from 'lucide-react';
-import type { HistoryEntry, HistorySummary } from '@shared/types/history';
+import type { LucideIcon } from 'lucide-react';
+import type { HistoryEntry, HistorySummary, SqlHistoryEntry } from '@shared/types/history';
+import { isSqlHistoryEntry } from '@shared/types/history';
+import type { Engine, Profile } from '@shared/types/profile';
+import {
+  isFirestoreProfile,
+  isMssqlProfile,
+  isMysqlProfile,
+  isPostgresProfile,
+} from '@shared/types/profile';
 import { useAppState } from '../state/AppState';
 import { ipc } from '../lib/ipcClient';
 import { Button } from '../components/ui/button';
@@ -96,7 +106,8 @@ export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery
     return entries.filter(
       (e) =>
         e.question.toLowerCase().includes(q) ||
-        (e.collection ?? '').toLowerCase().includes(q),
+        (e.collection ?? '').toLowerCase().includes(q) ||
+        (e.sqlPreview ?? '').toLowerCase().includes(q),
     );
   }, [entries, search]);
 
@@ -152,14 +163,14 @@ export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
         <HistoryIcon size={14} className="text-primary" />
         <span className="text-sm font-semibold">Query history</span>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">
           · {entries.length} {entries.length === 1 ? 'entry' : 'entries'} for{' '}
           <span className="font-medium text-foreground/80">{activeProfile.name}</span>
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search
               size={11}
@@ -169,7 +180,7 @@ export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter…"
-              className="h-7 w-56 pl-6 text-xs"
+              className="h-7 w-full pl-6 text-xs sm:w-56"
             />
           </div>
           <Button
@@ -213,6 +224,7 @@ export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery
                   <HistoryRow
                     key={item.id}
                     item={item}
+                    profile={activeProfile}
                     onOpen={() => openDetail(item.id)}
                   />
                 ))}
@@ -276,9 +288,11 @@ export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery
 
 function HistoryRow({
   item,
+  profile,
   onOpen,
 }: {
   item: HistorySummary;
+  profile: Profile | null;
   onOpen: () => void;
 }) {
   return (
@@ -302,6 +316,20 @@ function HistoryRow({
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span>{formatRelative(item.createdAt)}</span>
+          {profile ? (
+            <>
+              <span>·</span>
+              <DatabaseChip profile={profile} />
+            </>
+          ) : null}
+          {item.mode === 'sql' && item.sqlPreview ? (
+            <>
+              <span>·</span>
+              <span className="max-w-[200px] truncate font-mono" title={item.sqlPreview}>
+                {item.sqlPreview}
+              </span>
+            </>
+          ) : null}
           {item.collection ? (
             <>
               <span>·</span>
@@ -329,8 +357,84 @@ function HistoryRow({
   );
 }
 
+const envChipClass: Record<Profile['envTag'], string> = {
+  dev: 'border-env-dev/40 bg-env-dev/10 text-env-dev',
+  staging: 'border-env-staging/40 bg-env-staging/10 text-env-staging',
+  prod: 'border-env-prod/40 bg-env-prod/10 text-env-prod',
+};
+
+/**
+ * Per-engine presentation metadata for the history tile chip.
+ * Add new engines (mysql, mssql, oracle, …) by extending this lookup and
+ * `getDatabaseName` / `getDatabaseTitle` below — the rest of the chip is
+ * engine-agnostic.
+ */
+const engineMeta: Record<Engine, { label: string; icon: LucideIcon }> = {
+  firestore: { label: 'Firestore', icon: Flame },
+  postgres: { label: 'Postgres', icon: Database },
+  mysql: { label: 'MySQL', icon: Database },
+  mssql: { label: 'SQL Server', icon: Database },
+};
+
+function getDatabaseName(profile: Profile): string {
+  if (isFirestoreProfile(profile)) return profile.projectId;
+  if (isPostgresProfile(profile)) return profile.database;
+  if (isMysqlProfile(profile)) return profile.database;
+  if (isMssqlProfile(profile)) return profile.database;
+  // Exhaustiveness guard — adding a new engine variant will fail here.
+  const _exhaustive: never = profile;
+  return (_exhaustive as { name?: string }).name ?? '';
+}
+
+function getDatabaseTitle(profile: Profile): string {
+  const meta = engineMeta[profile.engine];
+  if (isFirestoreProfile(profile)) {
+    const where =
+      profile.kind === 'emulator' ? `emulator @ ${profile.host}:${profile.port}` : 'live';
+    return `${meta.label} · ${profile.projectId} (${where})`;
+  }
+  if (isPostgresProfile(profile) || isMysqlProfile(profile)) {
+    return `${meta.label} · ${profile.user}@${profile.host}:${profile.port}/${profile.database}`;
+  }
+  if (isMssqlProfile(profile)) {
+    const hostPart = profile.instanceName
+      ? `${profile.host}\\${profile.instanceName}`
+      : `${profile.host}:${profile.port}`;
+    return `${meta.label} · ${profile.user}@${hostPart}/${profile.database}`;
+  }
+  return meta.label;
+}
+
+function DatabaseChip({ profile }: { profile: Profile }) {
+  const meta = engineMeta[profile.engine];
+  const Icon = meta.icon;
+  const name = getDatabaseName(profile);
+  // Firestore-specific: surface "emulator" at a glance since the same project
+  // id can be targeted by both live and emulator profiles.
+  const isEmulator = isFirestoreProfile(profile) && profile.kind === 'emulator';
+  return (
+    <span
+      className={cn('badge normal-case tracking-normal', envChipClass[profile.envTag])}
+      title={getDatabaseTitle(profile)}
+    >
+      <Icon size={10} />
+      <span className="font-semibold uppercase tracking-wide">{meta.label}</span>
+      <span className="opacity-50">·</span>
+      <span className="max-w-[140px] truncate font-medium">{name}</span>
+      {isEmulator ? (
+        <span className="ml-0.5 text-[9px] font-semibold uppercase tracking-wider opacity-70">
+          · emu
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function HistoryDetail({ entry }: { entry: HistoryEntry }) {
   const [tab, setTab] = useState<'rows' | 'plan'>('rows');
+  if (isSqlHistoryEntry(entry)) {
+    return <SqlHistoryDetail entry={entry} tab={tab} onTab={setTab} />;
+  }
   const rowCount = entry.outcome.ok ? entry.outcome.rows.length : 0;
 
   return (
@@ -421,13 +525,116 @@ function HistoryDetail({ entry }: { entry: HistoryEntry }) {
   );
 }
 
+function SqlHistoryDetail({
+  entry,
+  tab,
+  onTab,
+}: {
+  entry: SqlHistoryEntry;
+  tab: 'rows' | 'plan';
+  onTab: (t: 'rows' | 'plan') => void;
+}) {
+  const rowCount = entry.outcome.ok ? entry.outcome.rows.length : 0;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-md border border-border bg-secondary/30 px-3 py-2 text-sm">
+        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Question</div>
+        <div className="mt-0.5 whitespace-pre-wrap">{entry.question}</div>
+        <div className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">SQL</div>
+        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-border/60 bg-background/50 p-2 text-[11px] font-mono text-foreground/90">
+          {entry.sqlPlan.sql}
+        </pre>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <span>
+            {entry.sqlPlan.dialect} · limit {entry.sqlPlan.limit}
+          </span>
+          {entry.outcome.ok ? (
+            <>
+              <span>
+                {rowCount} {rowCount === 1 ? 'row' : 'rows'}
+              </span>
+              <span>{formatDuration(entry.outcome.elapsedMs)}</span>
+            </>
+          ) : (
+            <span className="text-destructive">{entry.outcome.code}</span>
+          )}
+          {entry.rowsTruncated ? (
+            <span className="rounded bg-env-staging/20 px-1.5 py-0.5 text-env-staging">
+              rows truncated in history
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 border-b border-border text-xs">
+        {(['rows', 'plan'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onTab(t)}
+            className={cn(
+              'relative px-2 py-1.5 font-medium capitalize transition-colors',
+              tab === t
+                ? 'text-primary after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t === 'plan' ? 'plan JSON' : t}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'rows' ? (
+        entry.outcome.ok ? (
+          entry.outcome.rows.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              No rows returned.
+            </div>
+          ) : (
+            <pre className="max-h-[420px] overflow-auto rounded-md border border-border bg-background/80 p-2 text-[11px] leading-relaxed">
+              {JSON.stringify(
+                entry.outcome.rows.map((r, i) => ({ i, ...r })),
+                null,
+                2,
+              )}
+            </pre>
+          )
+        ) : (
+          <div className="space-y-2">
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
+              <div className="font-semibold text-destructive">{entry.outcome.code}</div>
+              <div className="mt-1 whitespace-pre-wrap text-foreground/90">
+                {entry.outcome.message}
+              </div>
+            </div>
+            {entry.outcome.executedSql ? (
+              <div>
+                <div className="text-[10px] text-muted-foreground">Executed SQL</div>
+                <pre className="mt-1 whitespace-pre-wrap rounded border border-border bg-background/50 p-2 text-[11px] font-mono">
+                  {entry.outcome.executedSql}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        )
+      ) : (
+        <pre className="max-h-[420px] overflow-auto rounded-md border border-border bg-background/80 p-2 text-[11px] leading-relaxed">
+          {JSON.stringify(entry.sqlPlan, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/60 text-primary">
         <HistoryIcon size={20} />
       </div>
-      <div>No questions asked yet. Every run you perform will show up here.</div>
+      <div>
+        No queries yet. Every question or SQL run for this profile is saved here.
+      </div>
     </div>
   );
 }

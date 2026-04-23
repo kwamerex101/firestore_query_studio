@@ -15,6 +15,7 @@ This project draws inspiration from **[Query Studio (db-lang)](https://github.co
 - [Inspiration](#inspiration)
 - [Why use this](#why-use-this)
 - [Features](#features)
+- [Desktop vs Web (PWA) — feature parity](#desktop-vs-web-pwa--feature-parity)
 - [Tech stack](#tech-stack)
 - [Prerequisites](#prerequisites)
 - [Quick start](#quick-start)
@@ -56,18 +57,70 @@ This project draws inspiration from **[Query Studio (db-lang)](https://github.co
 | **Results**                 | **TanStack Table**: sort, virtualized rows, JSON/CSV export, copy document paths, warnings for truncated scans.                                                                                                        |
 | **Explain & insights**      | **Explain** tab: plan JSON, rationale, pseudo Firestore SDK code. **Insights** tab: optional LLM summary of the result set (same provider rules as planning).                                                          |
 | **History**                 | Per-profile **query history** (question, collection, plan snapshot, outcome); reopen a run into the Query tab.                                                                                                         |
-| **Settings**                | OpenAI-compatible **base URL**, **model**, **API key**, **request timeout**, **warm-up** (local servers).                                                                                                              |
-| **Cursor**                  | **Cursor CLI** command, model, mode, timeout, env, tests—and the **toggle** that selects **OpenAI-compatible** vs **Cursor CLI** as the active planner backend.                                                        |
+| **Settings → LLM**          | OpenAI-compatible **base URL**, **model**, **API key**, **request timeout**, **warm-up** (local servers).                                                                                                              |
+| **Settings → Cursor CLI**   | **Cursor CLI** command, model, mode, timeout, env, tests—and the **toggle** that selects **OpenAI-compatible** vs **Cursor CLI** as the active planner backend.                                                        |
 | **Desktop shell**           | **Electron** + **Vite**; renderer uses **strict CSP** (see `[src/renderer/index.html](./src/renderer/index.html)`); sensitive values use `**safeStorage`** with a documented plain-file fallback on some Linux setups. |
+| **Web / PWA shell**         | Same React UI, bundled with `vite.config.web.ts` + `vite-plugin-pwa`. Installable on desktop and mobile browsers; Firestore via the **Firebase Web SDK** + Firebase Auth; API keys + config live in **IndexedDB** (AES-GCM encrypted, device-local). |
+
+
+---
+
+## Desktop vs Web (PWA) — feature parity
+
+The same renderer ships in two shells:
+
+- **Desktop (Electron)** — full feature set including Admin SDK, Postgres / MySQL / SQL Server (read-only), the Cursor CLI planner, and the OS keychain. Service-account JSON never leaves your machine.
+- **Web / PWA** — browser-native build. No Node, no Admin SDK. Installable from Chrome/Edge/Safari; works on phones + tablets. Each profile asks you to paste the public **Firebase Web config** and sign in with Firebase Auth; Firestore Security Rules decide what you can read.
+
+The renderer picks the correct backend via the `@transport` Vite alias and a runtime `capabilities` flag, so UI code stays identical across shells.
+
+| Capability                         | Desktop (Electron)                        | Web / PWA                                                                        |
+| ---------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------- |
+| Firestore read (live)              | **Yes** — Firebase Admin SDK              | **Yes** — Firebase Web SDK, subject to your **Security Rules + Auth**           |
+| Firestore emulator                 | **Yes**                                   | **No** (browser cannot reach arbitrary localhost ports + open CORS)              |
+| Postgres profiles                  | **Yes** — `pg` driver over TCP            | **No** (browsers don't speak the Postgres wire protocol)                         |
+| MySQL profiles                     | **Yes** — `mysql2/promise` over TCP       | **No** (browsers can't open raw TCP)                                             |
+| SQL Server (MSSQL) profiles        | **Yes** — `mssql` / `tedious` over TCP    | **No** (browsers can't open raw TCP)                                             |
+| Cursor CLI planner                 | **Yes** — local `cursor-agent` subprocess | **No** (browsers can't spawn local processes)                                    |
+| OpenAI-compatible planner          | **Yes** (BYOK)                            | **Yes** (BYOK, direct `fetch` to your endpoint)                                  |
+| Service-account credential storage | OS keychain / Electron `safeStorage`      | IndexedDB **only** (AES-GCM device key; weaker — avoid on shared machines)       |
+| Query history / schema overrides   | Local JSON in user data dir               | IndexedDB (per browser profile)                                                  |
+| Profile-level collection listing   | Admin SDK `listCollections`               | Manual entry (Web SDK has no `listCollections`; enter the collection path)       |
+| Installable / offline shell        | Native desktop app                        | Installable PWA, offline app shell via service worker (data requires network)    |
+
+### When to use which?
+
+- **Use the desktop app** when you need prod Firestore access, Postgres / MySQL / SQL Server reads, the Cursor CLI planner, or you want the OS keychain for credentials.
+- **Use the web / PWA build** when you want instant setup, mobile access, a throwaway session on a coworker's machine, or a staging-project-only workflow gated by Firebase Auth.
+
+### Web / PWA quick start
+
+```bash
+pnpm install
+pnpm dev:web            # → http://127.0.0.1:5174
+# Or for a production bundle + preview:
+pnpm build:web && pnpm preview:web
+```
+
+Inside the app:
+
+1. Go to **Profiles → New profile**, choose **Firestore live**, set a name + project ID.
+2. Click the **key icon** on the profile card to paste your **Firebase Web config** (from the Firebase console → *Project settings* → *Your apps*). The dialog accepts the raw JSON or the `const firebaseConfig = { … }` snippet.
+3. Set the profile as active. The header banner shows "Not signed in…" — click **Sign in with Google**.
+4. Open the **Query** tab and ask a question. Results are scoped by your Security Rules.
+
+> Firebase Auth's `signInWithPopup` requires the origin to be listed under **Authentication → Settings → Authorized domains** in the Firebase console.
 
 
 ---
 
 ## Tech stack
 
-- **Electron** (main + preload + renderer), **electron-vite**, **TypeScript**
+- **Electron** (main + preload + renderer), **electron-vite**, **TypeScript** — desktop shell
+- **Vite** + **`vite-plugin-pwa`** — standalone web / PWA shell (same renderer, `@transport` alias swap)
 - **React 19**, **Tailwind CSS**, **lucide-react**
-- **Firebase Admin SDK** for Firestore
+- **Firebase Admin SDK** (desktop) / **Firebase Web SDK + Firebase Auth** (web) for Firestore
+- **`idb`** + **Web Crypto API** for browser-side profiles, history, and encrypted API keys
 - **Zod** for shared types, IPC payloads, and `QueryPlan` validation
 - **TanStack Table** + **TanStack Virtual** for the results grid
 - **Vitest** for unit tests; **Firebase emulator** for optional integration tests
@@ -83,7 +136,7 @@ This project draws inspiration from **[Query Studio (db-lang)](https://github.co
 | **pnpm**                  | `corepack enable && corepack prepare pnpm@latest --activate` or `npm i -g pnpm`.                                                                                     |
 | **Java 11+**              | Only if you run `**pnpm test:emulator`** or start the Firestore emulator yourself.                                                                                   |
 | **Firebase CLI**          | Only for `**pnpm test:emulator`** or local emulator workflows: `npm i -g firebase-tools`.                                                                            |
-| **Cursor CLI (optional)** | If you use the **Cursor CLI** provider, install the Cursor CLI / `cursor-agent` per [Cursor’s docs](https://cursor.com/docs) and configure it on the **Cursor** tab. |
+| **Cursor CLI (optional)** | If you use the **Cursor CLI** provider, install the Cursor CLI / `cursor-agent` per [Cursor’s docs](https://cursor.com/docs) and configure it in **Settings → Cursor CLI**. |
 
 
 **Native modules:** `electron` and `keytar` may compile on install. This repo uses `pnpm.onlyBuiltDependencies` so installs stay non-interactive where possible.
@@ -102,7 +155,7 @@ pnpm dev
 `pnpm dev` runs **electron-vite dev**: Electron opens, the renderer is served with HMR (default Vite port, often `5173`), and main/preload rebuild on change.
 
 1. Open **Profiles** → create an **Emulator** or **Live** profile → **Set active**.
-2. Open **Settings** (OpenAI-compatible provider) or **Cursor** (CLI provider) → configure and save.
+2. Open **Settings → LLM** (OpenAI-compatible provider) or **Settings → Cursor CLI** (CLI provider) → configure and save.
 3. Open **Query** → optional collection → natural language question → **Build plan** → **Run** (or enable auto-run).
 
 ---
@@ -112,9 +165,12 @@ pnpm dev
 
 | Script               | Purpose                                                                                       |
 | -------------------- | --------------------------------------------------------------------------------------------- |
-| `pnpm dev`           | Development: Electron + Vite HMR.                                                             |
-| `pnpm build`         | Production bundle → `out/main`, `out/preload`, `out/renderer`.                                |
-| `pnpm start`         | `electron-vite preview` (preview production build).                                           |
+| `pnpm dev`           | Desktop development: Electron + Vite HMR.                                                     |
+| `pnpm build`         | Desktop production bundle → `out/main`, `out/preload`, `out/renderer`.                        |
+| `pnpm start`         | `electron-vite preview` (preview desktop build).                                              |
+| `pnpm dev:web`       | **Web / PWA** dev server on `http://127.0.0.1:5174` (set `PWA_DEV=1` to test the SW).         |
+| `pnpm build:web`     | **Web / PWA** static SPA → `dist/web/` (manifest + service worker). Deploy to any static host. |
+| `pnpm preview:web`   | Serve the built `dist/web/` locally to smoke-test the PWA install flow.                       |
 | `pnpm test`          | Unit tests (no emulator, no network).                                                         |
 | `pnpm test:watch`    | Vitest watch mode.                                                                            |
 | `pnpm test:emulator` | Integration tests via `firebase emulators:exec --only firestore` (needs Java + Firebase CLI). |
@@ -167,13 +223,13 @@ The app stores an **active provider** (`openai-compat` | `cursor-cli`) alongside
 
 ### Cursor CLI
 
-**Cursor** tab:
+**Settings → Cursor CLI**:
 
 - Configure `**cursor-agent`** (or your wrapper), **model**, **mode** (`default` | `plan` | `ask`), optional **cwd**, **extra args**, **environment** key/value lines, and **timeout** (default 60s).
 - Use **Test** / **List models** to verify the binary is on `PATH` and responding.
 - After a successful **Test** and **Save**, enable **Use Cursor CLI as the planner backend** so planning and insights use the CLI.
 
-When **Cursor CLI** is the active provider, **plan** and **insights** calls go through the CLI instead of the HTTP LLM client. Keep **Settings** filled if you switch back to OpenAI-compatible mode.
+When **Cursor CLI** is the active provider, **plan** and **insights** calls go through the CLI instead of the HTTP LLM client. Keep the **Settings → LLM** section filled if you switch back to OpenAI-compatible mode.
 
 ---
 
@@ -188,9 +244,8 @@ Switching tabs does **not** unmount panels: in-flight **Build plan** / **Run** w
 | ------------ | ------------------------------------------------------------------------------------------------- |
 | **Query**    | NL question, collection picker, plan + run, results, Explain / Insights / Schema.                 |
 | **History**  | Per-profile history; reopen entries into Query.                                                   |
-| **Profiles** | CRUD profiles, active profile, env tag, caps, help links for Project ID / service account JSON.   |
-| **Cursor**   | Cursor CLI configuration, model listing, smoke test, and **switch active provider** (HTTP ↔ CLI). |
-| **Settings** | OpenAI-compatible HTTP LLM fields (used when the active provider is not Cursor CLI).              |
+| **Profiles** | CRUD profiles, active profile, env tag, caps, help links for Project ID / service account JSON.                               |
+| **Settings** | Two sub-sections: **LLM** (OpenAI-compatible HTTP fields) and **Cursor CLI** (CLI config + switch active provider HTTP ↔ CLI). |
 
 
 ### Typical flow
@@ -217,7 +272,7 @@ The LLM is instructed with Firestore constraints (single inequality field per qu
 ```mermaid
 flowchart TB
   subgraph Renderer [Renderer: React + Tailwind + TanStack Table]
-    UI[Query / History / Profiles / Cursor / Settings]
+    UI[Query / History / Profiles / Settings]
   end
   subgraph Preload [Preload: contextBridge]
     IPC[Typed IPC bridge]
@@ -326,8 +381,8 @@ Report security issues responsibly — see [`SECURITY.md`](./SECURITY.md) for th
 | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `**pnpm test:emulator` fails**   | Java on `PATH`, `firebase` CLI installed, port 8080 free.                                                 |
 | **Plan timeouts with local LLM** | Increase **timeout** in Settings; use **Warm up model**; prefer a smaller model or GPU offload.           |
-| `**LLM_NOT_CONFIGURED`**         | Open **Settings**, save base URL + key (HTTP mode), or switch provider / configure **Cursor** tab.        |
-| `**CURSOR_NOT_CONFIGURED`**      | Select Cursor provider only after saving Cursor tab settings.                                             |
+| `**LLM_NOT_CONFIGURED`**         | Open **Settings → LLM**, save base URL + key (HTTP mode), or switch provider / configure **Settings → Cursor CLI**. |
+| `**CURSOR_NOT_CONFIGURED`**      | Select Cursor provider only after saving **Settings → Cursor CLI** settings.                                        |
 | **Composite index errors**       | Use the in-app link to open the Firebase console index builder.                                           |
 | **Linux keychain / keytar**      | May need platform packages for secret storage; app falls back to a chmod `0600` file and logs a warning.  |
 | **CSP console noise**            | Rare; renderer CSP is in `src/renderer/index.html`. Main-process `fetch` is not subject to that meta tag. |

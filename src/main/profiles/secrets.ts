@@ -14,6 +14,12 @@ type SecretsShape = {
   llm?: LlmSettings;
   cursor?: CursorSettings;
   provider?: LlmProvider;
+  /**
+   * Per-profile secrets (e.g. Postgres passwords). Keyed by profile id.
+   * The plaintext value never leaves the main process; the profile blob
+   * on disk only carries a `hasPassword: boolean` flag.
+   */
+  profileSecrets?: Record<string, string>;
 };
 
 /**
@@ -118,4 +124,27 @@ export async function setActiveProvider(provider: LlmProvider): Promise<LlmProvi
   data.provider = parsed;
   await writeRaw(data);
   return parsed;
+}
+
+// --- Per-profile secrets ---------------------------------------------------
+
+export async function getProfileSecret(profileId: string): Promise<string | null> {
+  const data = await readRaw();
+  return data.profileSecrets?.[profileId] ?? null;
+}
+
+export async function setProfileSecret(profileId: string, secret: string): Promise<void> {
+  const data = await readRaw();
+  data.profileSecrets = { ...(data.profileSecrets ?? {}), [profileId]: secret };
+  await writeRaw(data);
+}
+
+export async function clearProfileSecret(profileId: string): Promise<void> {
+  const data = await readRaw();
+  if (!data.profileSecrets) return;
+  if (!(profileId in data.profileSecrets)) return;
+  const { [profileId]: _dropped, ...rest } = data.profileSecrets;
+  void _dropped;
+  data.profileSecrets = rest;
+  await writeRaw(data);
 }

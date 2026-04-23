@@ -26,6 +26,33 @@ import {
   HistoryFindCachedResult,
   InsightsGenerateRequest,
   InsightsGenerateOutcome,
+  VisualsGenerateRequest,
+  VisualsGenerateOutcome,
+  DbTestConnectionRequest,
+  DbTestConnectionOutcome,
+  DbProbeSqlDatabasesRequest,
+  DbProbeSqlDatabasesOutcome,
+  DbProbeSqlSchemasRequest,
+  DbProbeSqlSchemasOutcome,
+  DbListContainersResult,
+  SqlPlanRequest,
+  SqlPlanBuildOutcome,
+  SqlExecuteRequest,
+  SqlExecuteOutcome,
+  SqlSampleTableRequest,
+  SqlSampleTableResult,
+  PickServiceAccountResult,
+  ValidateServiceAccountRequest,
+  ValidateServiceAccountResult,
+  ImportServiceAccountRequest,
+  ImportServiceAccountResult,
+  SqlStreamStartRequest,
+  SqlStreamStartOutcome,
+  ExecuteStreamStartRequest,
+  ExecuteStreamStartOutcome,
+  StreamCancelRequest,
+  ExportStartRequest,
+  ExportStartOutcome,
 } from './types/ipc';
 import {
   Profile,
@@ -139,6 +166,34 @@ export const ipcApi = {
     request: Void,
     response: z.array(z.string()),
   },
+  [IpcChannels.dbTestConnection]: {
+    request: DbTestConnectionRequest,
+    response: DbTestConnectionOutcome,
+  },
+  [IpcChannels.dbProbeSqlDatabases]: {
+    request: DbProbeSqlDatabasesRequest,
+    response: DbProbeSqlDatabasesOutcome,
+  },
+  [IpcChannels.dbProbeSqlSchemas]: {
+    request: DbProbeSqlSchemasRequest,
+    response: DbProbeSqlSchemasOutcome,
+  },
+  [IpcChannels.dbListContainers]: {
+    request: Void,
+    response: DbListContainersResult,
+  },
+  [IpcChannels.dbExecuteSql]: {
+    request: SqlExecuteRequest,
+    response: SqlExecuteOutcome,
+  },
+  [IpcChannels.dbSampleTable]: {
+    request: SqlSampleTableRequest,
+    response: SqlSampleTableResult,
+  },
+  [IpcChannels.planBuildSql]: {
+    request: SqlPlanRequest,
+    response: SqlPlanBuildOutcome,
+  },
   [IpcChannels.historyList]: {
     request: HistoryListRequest,
     response: HistoryListResult,
@@ -162,6 +217,42 @@ export const ipcApi = {
   [IpcChannels.insightsGenerate]: {
     request: InsightsGenerateRequest,
     response: InsightsGenerateOutcome,
+  },
+  [IpcChannels.visualsGenerate]: {
+    request: VisualsGenerateRequest,
+    response: VisualsGenerateOutcome,
+  },
+  [IpcChannels.dialogPickServiceAccount]: {
+    request: Void,
+    response: PickServiceAccountResult,
+  },
+  [IpcChannels.dialogValidateServiceAccount]: {
+    request: ValidateServiceAccountRequest,
+    response: ValidateServiceAccountResult,
+  },
+  [IpcChannels.dialogImportServiceAccount]: {
+    request: ImportServiceAccountRequest,
+    response: ImportServiceAccountResult,
+  },
+  [IpcChannels.sqlStreamStart]: {
+    request: SqlStreamStartRequest,
+    response: SqlStreamStartOutcome,
+  },
+  [IpcChannels.executeStreamStart]: {
+    request: ExecuteStreamStartRequest,
+    response: ExecuteStreamStartOutcome,
+  },
+  [IpcChannels.streamCancel]: {
+    request: StreamCancelRequest,
+    response: OkAck,
+  },
+  [IpcChannels.exportStart]: {
+    request: ExportStartRequest,
+    response: ExportStartOutcome,
+  },
+  [IpcChannels.exportCancel]: {
+    request: StreamCancelRequest,
+    response: OkAck,
   },
 } as const;
 

@@ -1,10 +1,10 @@
 import type { Firestore } from 'firebase-admin/firestore';
-import type { Profile } from '@shared/types/profile';
+import type { ProfileKind } from '@shared/types/profile';
 
 export interface FirestoreHandle {
   profileId: string;
   projectId: string;
-  kind: Profile['kind'];
+  kind: ProfileKind;
   firestore: Firestore;
   dispose(): Promise<void>;
 }

@@ -45,7 +45,7 @@ describe('QueryPlan Zod validator', () => {
     const r = QueryPlan.safeParse({
       mode: 'scan',
       collection: 'users',
-      scanCap: 1_000_000,
+      scanCap: 20_000_000,
       postFilters: [],
       rationale: 'too big',
     });
@@ -110,7 +110,7 @@ describe('QueryPlan Zod validator', () => {
     const r = QueryPlan.safeParse({
       mode: 'query',
       collection: 'users',
-      limit: 2000,
+      limit: 1_000_000,
       rationale: 'x',
     });
     expect(r.success).toBe(false);

@@ -101,7 +101,27 @@ const BasePlan = z.object({
   collectionGroup: z.boolean().default(false),
   filters: z.array(PlanFilter).default([]),
   orderBy: z.array(PlanOrderBy).default([]),
-  limit: z.number().int().positive().max(1000).default(50),
+  /**
+   * Row ceiling for the run. Historically capped at 1,000; raised to
+   * 200,000 so streaming executors can materialize a large window into
+   * the renderer's row-window store. The hard ceiling on the driver side
+   * is enforced separately via the profile's `scanCap` / per-call
+   * `hardLimit` so planner emissions can never exhaust memory on their
+   * own.
+   */
+  limit: z.number().int().positive().max(200_000).default(50),
+  /**
+   * Optional cap for how many rows the renderer keeps in memory
+   * (virtualized window). When set, `hardLimit` may be larger for
+   * streaming-to-disk exports. Falls back to `limit` when unset.
+   */
+  uiLimit: z.number().int().positive().max(200_000).optional(),
+  /**
+   * Optional overall row ceiling for streaming exports. Only consulted
+   * by the streaming executor / `export.start` path; the in-UI run uses
+   * `uiLimit ?? limit`. Defaults to `limit` when unset.
+   */
+  hardLimit: z.number().int().positive().max(10_000_000).optional(),
   rationale: z.string().min(1),
 });
 
@@ -112,7 +132,7 @@ export type QueryOnlyPlan = z.infer<typeof QueryOnlyPlan>;
 
 export const ScanPlan = BasePlan.extend({
   mode: z.literal('scan'),
-  scanCap: z.number().int().positive().max(50_000).default(500),
+  scanCap: z.number().int().positive().max(10_000_000).default(500),
   postFilters: z
     .array(
       z.object({

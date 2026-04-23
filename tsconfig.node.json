@@ -26,6 +26,7 @@
     "src/shared/**/*.ts",
     "tests/**/*.ts",
     "electron.vite.config.ts",
+    "vite.config.web.ts",
     "vitest.config.ts",
     "vitest.emulator.config.ts"
   ]

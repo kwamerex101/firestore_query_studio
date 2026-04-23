@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Firestore Query Studio">
+  <title>Firestore Query Studio</title>
+  <rect width="512" height="512" rx="96" fill="#0b0b0b" />
+  <g transform="translate(64 96)" fill="none" stroke="#ffca28" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Stacked "database" cylinders evoking Firestore. -->
+    <ellipse cx="192" cy="40" rx="160" ry="32" fill="#ffa000" stroke="#ffa000" />
+    <path d="M32 40 v80 a160 32 0 0 0 320 0 V40" fill="#ffca28" />
+    <path d="M32 120 v80 a160 32 0 0 0 320 0 V120" fill="#ffd54f" />
+    <path d="M32 200 v80 a160 32 0 0 0 320 0 V200" fill="#fff59d" />
+  </g>
+  <!-- Magnifying glass to hint at the "query" side of the product. -->
+  <g transform="translate(300 300)" fill="none" stroke="#0b0b0b" stroke-width="24" stroke-linecap="round">
+    <circle cx="56" cy="56" r="56" fill="#ffffff" />
+    <circle cx="56" cy="56" r="30" />
+    <line x1="80" y1="80" x2="120" y2="120" />
+  </g>
+</svg>

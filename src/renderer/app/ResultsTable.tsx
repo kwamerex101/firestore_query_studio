@@ -12,39 +12,35 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Braces,
   Check,
   ChevronRight,
   Copy,
-  Download,
-  Rows3,
 } from 'lucide-react';
-import type { ResultRow } from '@shared/types/results';
-import { Button } from '../components/ui/button';
+import type { QueryPlan } from '@shared/types/plan';
+import type { ResultRow, RunOutcome } from '@shared/types/results';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
+import { firestoreRowsToCsv, formatCellText } from '@shared/csv';
+import { downloadText } from '../lib/download';
+import { ResultsToolbar, type ResultsViewMode } from './ResultsToolbar';
+import { VisualView } from './VisualView';
 
 interface ResultsTableProps {
   rows: ResultRow[];
   warnings: string[];
+  /**
+   * Context for the AI Visual view. When all three are provided (and
+   * `rows.length > 0`) the Visual menu generates charts on demand.
+   */
+  question?: string;
+  collection?: string;
+  plan?: QueryPlan | null;
+  outcome?: RunOutcome | null;
 }
-
-type ViewMode = 'table' | 'json';
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
 /* ------------------------------------------------------------------ */
-
-function formatCellText(v: unknown): string {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-}
 
 function valueKind(v: unknown): 'null' | 'boolean' | 'number' | 'string' | 'object' {
   if (v === null || v === undefined) return 'null';
@@ -98,48 +94,35 @@ function Cell({ value }: { value: unknown }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Download helpers                                                   */
-/* ------------------------------------------------------------------ */
-
-function download(filename: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function toCsv(rows: ResultRow[], columns: string[]): string {
-  const esc = (v: unknown) => {
-    const s = formatCellText(v);
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const header = ['__id', '__path', ...columns].map(esc).join(',');
-  const body = rows
-    .map((r) => [r.id, r.path, ...columns.map((c) => r.data[c])].map(esc).join(','))
-    .join('\n');
-  return `${header}\n${body}`;
-}
-
-/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-export function ResultsTable({ rows, warnings }: ResultsTableProps) {
+export function ResultsTable({
+  rows,
+  warnings,
+  question,
+  collection,
+  plan,
+  outcome,
+}: ResultsTableProps) {
   const toast = useToast();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [copied, setCopied] = useState<string | null>(null);
-  const [view, setView] = useState<ViewMode>('table');
+  const [view, setView] = useState<ResultsViewMode>('table');
 
   const columnNames = useMemo(() => {
+    // Column discovery is O(rows × fields) in the worst case, and Firestore
+    // documents often share a schema, so we only scan the first 200 rows
+    // (and then the last row as a cheap "shape drift" check). This keeps
+    // renders cheap for 100k-row streams while still catching the common
+    // case of a late-added field.
     const seen = new Set<string>();
-    for (const row of rows) {
-      for (const k of Object.keys(row.data)) {
-        seen.add(k);
-      }
+    const sampleCount = Math.min(rows.length, 200);
+    for (let i = 0; i < sampleCount; i += 1) {
+      for (const k of Object.keys(rows[i].data)) seen.add(k);
+    }
+    if (rows.length > sampleCount) {
+      for (const k of Object.keys(rows[rows.length - 1].data)) seen.add(k);
     }
     return Array.from(seen).sort();
   }, [rows]);
@@ -249,44 +232,49 @@ export function ResultsTable({ rows, warnings }: ResultsTableProps) {
 
   function exportJson() {
     const sorted = rowModel.rows.map((r) => r.original);
-    download(`fqs-results-${Date.now()}.json`, JSON.stringify(sorted, null, 2), 'application/json');
+    downloadText(
+      `fqs-results-${Date.now()}.json`,
+      JSON.stringify(sorted, null, 2),
+      'application/json',
+    );
   }
   function exportCsv() {
     const sorted = rowModel.rows.map((r) => r.original);
-    download(`fqs-results-${Date.now()}.csv`, toCsv(sorted, columnNames), 'text/csv');
+    downloadText(
+      `fqs-results-${Date.now()}.csv`,
+      firestoreRowsToCsv(sorted, columnNames),
+      'text/csv',
+    );
   }
+
+  // Cache key for the Visual view. `rows` identity changes on every
+  // new run, so identity alone is enough for invalidation; we mix in
+  // `rows.length` and the first row's id to be extra safe against
+  // memoisation surprises.
+  const visualCacheKey = useMemo(() => {
+    return `fs:${rows.length}:${rows[0]?.id ?? ''}:${rows[rows.length - 1]?.id ?? ''}`;
+  }, [rows]);
+
+  const canVisualize =
+    !!question && !!plan && !!outcome && outcome.ok && rows.length > 0;
 
   return (
     <div className="flex h-full flex-col animate-fade-in">
-      {/* toolbar */}
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-card/40 px-3 py-1.5 backdrop-blur-sm">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            <span className="font-mono text-foreground/90">{rows.length}</span> row{rows.length === 1 ? '' : 's'}
-          </span>
-          {columnNames.length > 0 ? (
-            <span className="text-muted-foreground/70">
-              · <span className="font-mono text-foreground/80">{columnNames.length}</span> field{columnNames.length === 1 ? '' : 's'}
-            </span>
-          ) : null}
-          {warnings.length > 0 ? (
-            <span className="text-env-staging">
-              · {warnings.length} warning{warnings.length === 1 ? '' : 's'}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2">
-          <ViewToggle view={view} onChange={setView} />
-          <div className="flex gap-1">
-            <Button size="sm" onClick={exportJson} title="Export as JSON">
-              <Download size={12} /> JSON
-            </Button>
-            <Button size="sm" onClick={exportCsv} title="Export as CSV">
-              <Download size={12} /> CSV
-            </Button>
-          </div>
-        </div>
-      </div>
+      <ResultsToolbar
+        stats={{ rows: rows.length, columns: columnNames.length, warnings: warnings.length }}
+        view={view}
+        onViewChange={setView}
+        onDownloadJson={exportJson}
+        onDownloadCsv={exportCsv}
+        canVisualize={canVisualize}
+        visualizeHint={
+          canVisualize
+            ? 'AI-generated infographics based on the current results'
+            : rows.length === 0
+              ? 'No rows to visualize'
+              : 'Visual charts require a completed query'
+        }
+      />
 
       {warnings.length > 0 ? (
         <div className="border-b border-env-staging/40 bg-env-staging/10 px-3 py-2 text-xs text-env-staging animate-fade-in-down">
@@ -299,6 +287,23 @@ export function ResultsTable({ rows, warnings }: ResultsTableProps) {
       {rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           No rows returned.
+        </div>
+      ) : view === 'visual' ? (
+        <div className="min-h-0 flex-1">
+          <VisualView
+            cacheKey={visualCacheKey}
+            hasRows={canVisualize}
+            buildRequest={() => ({
+              source: 'firestore',
+              question: question ?? '(no question)',
+              collection,
+              // `canVisualize` gates this path; the non-null assertions
+              // are safe because we only render Visual when all three
+              // are present.
+              plan: plan as QueryPlan,
+              outcome: outcome as RunOutcome,
+            })}
+          />
         </div>
       ) : view === 'table' ? (
         <div ref={scrollRef} className="flex-1 overflow-auto">
@@ -357,7 +362,6 @@ export function ResultsTable({ rows, warnings }: ResultsTableProps) {
                           style={
                             isFirst
                               ? {
-                                  // match zebra background on sticky cell
                                   background: zebra
                                     ? 'linear-gradient(hsl(var(--card) / 0.55), hsl(var(--card) / 0.55)), hsl(var(--background))'
                                     : 'hsl(var(--background))',
@@ -392,66 +396,20 @@ function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
   return <ArrowUpDown size={10} className="opacity-0 transition-opacity group-hover:opacity-60" />;
 }
 
-function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [indicator, setIndicator] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
-
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const el = container.querySelector<HTMLButtonElement>(`[data-view="${view}"]`);
-    if (!el) return;
-    const containerRect = container.getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
-    setIndicator({ left: rect.left - containerRect.left, width: rect.width });
-  }, [view]);
-
-  const opts: Array<{ id: ViewMode; label: string; icon: React.ReactNode }> = [
-    { id: 'table', label: 'Table', icon: <Rows3 size={12} /> },
-    { id: 'json', label: 'JSON', icon: <Braces size={12} /> },
-  ];
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative flex items-center rounded-md border border-border/60 bg-secondary/40 p-0.5"
-      role="tablist"
-      aria-label="Results view"
-    >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute top-0.5 bottom-0.5 rounded-[4px] bg-primary/20 shadow-soft transition-all duration-300 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)]"
-        style={{
-          transform: `translateX(${indicator.left}px)`,
-          width: indicator.width ? `${indicator.width}px` : 0,
-          opacity: indicator.width ? 1 : 0,
-        }}
-      />
-      {opts.map((o) => (
-        <button
-          key={o.id}
-          data-view={o.id}
-          role="tab"
-          aria-selected={view === o.id}
-          onClick={() => onChange(o.id)}
-          className={cn(
-            'relative z-10 inline-flex items-center gap-1 rounded-[4px] px-2 py-1 text-[11px] font-medium transition-colors',
-            view === o.id ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {o.icon}
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
+const JSON_VIEW_MAX_ROWS = 2_000;
 function JsonView({ rows }: { rows: ResultRow[] }) {
   const toast = useToast();
   const [copiedAll, setCopiedAll] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const json = useMemo(() => JSON.stringify(rows, null, 2), [rows]);
+  // Large result sets (>> 10k rows) make `JSON.stringify(rows, null, 2)`
+  // expensive enough to freeze the renderer for seconds. Cap the preview
+  // and expose the full payload through the explicit Download buttons.
+  const capped = useMemo(
+    () => (rows.length > JSON_VIEW_MAX_ROWS ? rows.slice(0, JSON_VIEW_MAX_ROWS) : rows),
+    [rows],
+  );
+  const jsonPreviewTruncated = rows.length > capped.length;
+  const json = useMemo(() => JSON.stringify(capped, null, 2), [capped]);
   const highlighted = useMemo(() => highlightJson(json), [json]);
 
   // Reset scroll to top whenever the rendered payload changes so users
@@ -469,24 +427,32 @@ function JsonView({ rows }: { rows: ResultRow[] }) {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
+      {jsonPreviewTruncated ? (
+        <div className="border-b border-env-staging/40 bg-env-staging/10 px-3 py-1.5 text-[11px] text-env-staging">
+          Showing the first {capped.length.toLocaleString()} of{' '}
+          {rows.length.toLocaleString()} rows as JSON. Use the Download button
+          to export the full result.
+        </div>
+      ) : null}
       <div className="pointer-events-none absolute right-3 top-2 z-10">
         <div className="pointer-events-auto">
-          <Button size="sm" variant="ghost" onClick={copyAll} title="Copy all JSON">
+          <button
+            type="button"
+            onClick={copyAll}
+            className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-secondary/60 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            title="Copy all JSON"
+          >
             {copiedAll ? (
               <Check size={12} className="text-env-dev animate-scale-in" />
             ) : (
               <Copy size={12} />
             )}
             {copiedAll ? 'Copied' : 'Copy'}
-          </Button>
+          </button>
         </div>
       </div>
       <div
         ref={scrollRef}
-        // `h-0 flex-1` gives the scroll container an explicit minimum size
-        // in a flex column, which together with `overflow-auto` guarantees
-        // that tall JSON payloads scroll inside this panel instead of
-        // pushing ancestors. `overscroll-contain` stops scroll chaining.
         className="h-0 flex-1 overflow-auto overscroll-contain focus:outline-none"
         tabIndex={0}
         aria-label="Results JSON, scrollable"

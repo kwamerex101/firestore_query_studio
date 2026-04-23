@@ -6,6 +6,7 @@ import type {
   HistoryEntry,
   HistorySummary,
 } from '@shared/types/history';
+import { isSqlHistoryEntry } from '@shared/types/history';
 
 const MAX_ENTRIES = 500;
 const MAX_ROWS_PER_ENTRY = 200;
@@ -42,7 +43,27 @@ async function writeFile(profileId: string, data: CacheFile): Promise<void> {
   });
 }
 
+function sqlPreviewText(sql: string, max = 200): string {
+  const t = sql.replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+}
+
 function summarize(entry: HistoryEntry): HistorySummary {
+  if (isSqlHistoryEntry(entry)) {
+    return {
+      id: entry.id,
+      profileId: entry.profileId,
+      createdAt: entry.createdAt,
+      question: entry.question,
+      collection: undefined,
+      mode: 'sql',
+      ok: entry.outcome.ok,
+      rowsReturned: entry.outcome.ok ? entry.outcome.rows.length : 0,
+      durationMs: entry.outcome.elapsedMs,
+      sqlPreview: sqlPreviewText(entry.sqlPlan.sql),
+    };
+  }
   return {
     id: entry.id,
     profileId: entry.profileId,
@@ -57,6 +78,18 @@ function summarize(entry: HistoryEntry): HistorySummary {
 }
 
 function truncateOutcomeRows(entry: HistoryEntry): HistoryEntry {
+  if (isSqlHistoryEntry(entry)) {
+    if (!entry.outcome.ok) return entry;
+    if (entry.outcome.rows.length <= MAX_ROWS_PER_ENTRY) return entry;
+    return {
+      ...entry,
+      rowsTruncated: true,
+      outcome: {
+        ...entry.outcome,
+        rows: entry.outcome.rows.slice(0, MAX_ROWS_PER_ENTRY),
+      },
+    };
+  }
   if (!entry.outcome.ok) return entry;
   if (entry.outcome.rows.length <= MAX_ROWS_PER_ENTRY) return entry;
   return {
@@ -94,16 +127,29 @@ export async function addHistoryEntry(
   input: Omit<HistoryEntry, 'id' | 'profileId' | 'createdAt' | 'rowsTruncated'>,
 ): Promise<HistoryEntry> {
   const file = await readFile(profileId);
-  const entry: HistoryEntry = {
+  const base = {
     id: randomUUID(),
     profileId,
     createdAt: Date.now(),
     rowsTruncated: false,
-    question: input.question,
-    collection: input.collection,
-    plan: input.plan,
-    outcome: input.outcome,
-  };
+  } as const;
+  const entry: HistoryEntry =
+    input.kind === 'sql'
+      ? {
+          ...base,
+          kind: 'sql',
+          question: input.question,
+          sqlPlan: input.sqlPlan,
+          outcome: input.outcome,
+        }
+      : {
+          ...base,
+          kind: 'firestore',
+          question: input.question,
+          collection: input.collection,
+          plan: input.plan,
+          outcome: input.outcome,
+        };
   const trimmed = truncateOutcomeRows(entry);
   file.entries.push(trimmed);
   // Keep newest-first ordering on disk to simplify debugging; also cap size.
@@ -141,6 +187,7 @@ export async function findCachedEntry(
   const match = file.entries
     .filter(
       (e) =>
+        !isSqlHistoryEntry(e) &&
         e.question.trim() === normalizedQ &&
         (e.collection?.trim() || undefined) === normalizedC &&
         e.outcome.ok,

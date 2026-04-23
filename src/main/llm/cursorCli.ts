@@ -1,8 +1,18 @@
 import { spawn, spawnSync } from 'node:child_process';
 import type { CursorSettings } from '@shared/types/profile';
 import type { CursorModelItem } from '@shared/types/ipc';
-import type { ChatOptions, ChatResponse } from './openaiCompat';
+import type { ChatResponse, LlmMessage } from './openaiCompat';
 import { LlmError } from './openaiCompat';
+
+/**
+ * Options accepted by `chatViaCursor`. We keep the `messages` field here
+ * (the shared `ChatBackendOptions` doesn't carry it) so existing callers
+ * that pass `{ messages, timeoutMs }` work unchanged.
+ */
+export interface CursorChatOptions {
+  messages: LlmMessage[];
+  timeoutMs?: number;
+}
 
 const MAX_BUFFER_BYTES = 1024 * 1024;
 const MODELS_TIMEOUT_MS = 5_000;
@@ -291,7 +301,7 @@ export async function testCursorCli(settings: CursorSettings): Promise<CursorTes
   return { ok: true, version: version || undefined, stdout: stdout.trim() || undefined };
 }
 
-function messagesToPrompt(messages: ChatOptions['messages']): string {
+function messagesToPrompt(messages: LlmMessage[]): string {
   const parts: string[] = [];
   for (const m of messages) {
     if (m.role === 'system') {
@@ -437,7 +447,7 @@ function readErrorText(value: unknown): string {
 
 export async function chatViaCursor(
   settings: CursorSettings,
-  opts: ChatOptions,
+  opts: CursorChatOptions,
 ): Promise<ChatResponse> {
   const timeoutMs = Math.max(
     1_000,

@@ -51,6 +51,10 @@ export default defineConfig({
       alias: {
         '@shared': resolve(__dirname, 'src/shared'),
         '@renderer': resolve(__dirname, 'src/renderer'),
+        // '@transport' is swapped to `transport/web.ts` by vite.config.web.ts
+        // when building the PWA target. Keep this pointing at the barrel so
+        // the desktop build resolves through `transport/index.ts` → electron.
+        '@transport': resolve(__dirname, 'src/renderer/transport/index.ts'),
       },
     },
     server: {

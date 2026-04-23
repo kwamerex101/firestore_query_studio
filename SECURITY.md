@@ -42,6 +42,8 @@ Some design decisions intentionally limit what this project tries to defend agai
 - **Admin SDK profiles bypass Firestore security rules** by design. Use dev / emulator profiles while exploring. This is a property of Firebase Admin SDK, not a vulnerability.
 - **Prompts and schema snapshots are sent to whatever LLM endpoint you configure.** The project cannot know if that endpoint is safe; avoid pasting real secrets into the natural language question box.
 - **Local secrets** use Electron `safeStorage` when available. On OSes where that is unavailable (some Linux setups), the app falls back to a `chmod 0600` file and logs a warning — this is a documented trade-off.
+- **Relational profiles (Postgres / MySQL / SQL Server)** run user-supplied SQL through a belt-and-braces read-only gate (`src/shared/sqlSafety.ts`) that rejects DDL/DML and multi-statement payloads, _and_ connect with a least-privileged user is still the user's responsibility. Granting a write-capable role to Firestore Query Studio is unsupported.
+- **Oracle is out of scope** for this release. Open an issue if you need it — we did not ship an Oracle driver rather than ship one we can't test.
 
 Reports about documented trade-offs are welcome but may be resolved as **won’t fix** with an explanation, rather than as a CVE.
 
@@ -53,7 +55,8 @@ In scope:
 - IPC validators and Zod schemas in `src/shared/**`
 - Secrets storage (`src/main/profiles/secrets.ts`)
 - Firestore executor & index hint parsing (`src/main/firestore/**`)
-- LLM clients and prompts (`src/main/llm/**`)
+- Relational drivers & SQL safety gate (`src/main/drivers/**`, `src/shared/sqlSafety.ts`)
+- LLM clients and prompts (`src/main/llm/**`, `src/shared/planner/**`)
 
 Out of scope:
 

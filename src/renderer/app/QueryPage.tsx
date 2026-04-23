@@ -12,6 +12,7 @@ import type { QueryPlan } from '@shared/types/plan';
 import type { CollectionSchema } from '@shared/types/schema';
 import type { RunOutcome } from '@shared/types/results';
 import type { HistoryEntry } from '@shared/types/history';
+import { isFirestoreHistoryEntry } from '@shared/types/history';
 import { useAppState } from '../state/AppState';
 import { ipc } from '../lib/ipcClient';
 import { Button } from '../components/ui/button';
@@ -22,6 +23,8 @@ import { ResultsTable } from './ResultsTable';
 import { ExplainPanel } from './ExplainPanel';
 import { SchemaEditor } from './SchemaEditor';
 import { InsightsPanel } from './InsightsPanel';
+import { SqlQueryPanel } from './SqlQueryPanel';
+import { isSqlProfile } from '@shared/types/profile';
 import { cn } from '../lib/utils';
 
 type RightTab = 'explain' | 'insights' | 'schema';
@@ -91,7 +94,9 @@ export function QueryPage() {
     setCollections([]);
     setPlanContext(null);
     setCachedEntry(null);
-    if (activeProfile) {
+    // Only Firestore profiles expose `collections.list` — Postgres profiles
+    // render a dedicated "coming soon" screen below and don't need this.
+    if (activeProfile && activeProfile.engine === 'firestore') {
       void reloadCollections();
     }
   }, [activeProfile, reloadCollections]);
@@ -163,6 +168,7 @@ export function QueryPage() {
       if (ctx) {
         try {
           await ipc.history.add({
+            source: 'firestore',
             question: ctx.question,
             collection: ctx.collection,
             plan: p,
@@ -235,6 +241,7 @@ export function QueryPage() {
    */
   useEffect(() => {
     if (!pendingHistory) return;
+    if (!isFirestoreHistoryEntry(pendingHistory)) return;
     setQuestion(pendingHistory.question);
     setCollection(pendingHistory.collection ?? '');
     setPlan(pendingHistory.plan);
@@ -248,6 +255,7 @@ export function QueryPage() {
   }, [pendingHistory, clearPendingHistory]);
 
   function reuseCachedEntry(entry: HistoryEntry) {
+    if (!isFirestoreHistoryEntry(entry)) return;
     setPlan(entry.plan);
     setOutcome(entry.outcome);
     setPlanContext({
@@ -296,18 +304,27 @@ export function QueryPage() {
     );
   }
 
+  if (isSqlProfile(activeProfile)) {
+    return (
+      <SqlQueryPanel
+        profile={activeProfile}
+        hasLlmConfigured={!!llm?.hasApiKey}
+      />
+    );
+  }
+
   const busy = building || running;
 
   return (
-    <div className="grid h-full" style={{ gridTemplateColumns: '1fr 420px' }}>
-      <div className="flex min-w-0 flex-col border-r border-border">
+    <div className="flex h-full min-h-0 flex-col overflow-auto lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-col lg:border-r lg:border-border">
         <div
           className={cn(
             'rounded-none border-b border-border p-3 transition-all',
             building && 'working-border',
           )}
         >
-          <div className="grid grid-cols-[1fr_220px_auto] items-start gap-2">
+          <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(0,1fr)_200px_auto] md:grid-cols-[minmax(0,1fr)_220px_auto]">
             <div>
               <label className="label">
                 <Sparkles size={10} className="mr-1 inline-block align-[-1px]" />
@@ -423,11 +440,18 @@ export function QueryPage() {
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1">
+        <div className="min-h-[240px] flex-1 lg:min-h-0">
           {outcome === null ? (
             <EmptyResults plan={plan} />
           ) : outcome.ok ? (
-            <ResultsTable rows={outcome.rows} warnings={outcome.warnings} />
+            <ResultsTable
+              rows={outcome.rows}
+              warnings={outcome.warnings}
+              question={planContext?.question ?? question}
+              collection={planContext?.collection ?? normalizeCollection(collection)}
+              plan={plan}
+              outcome={outcome}
+            />
           ) : (
             <ErrorView outcome={outcome} />
           )}
@@ -447,16 +471,21 @@ export function QueryPage() {
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-col">
+      <div className="flex min-h-0 flex-col border-t border-border lg:border-t-0">
         <RightTabs active={rightTab} onChange={setRightTab} />
-        <div className="min-h-0 flex-1">
+        <div className="min-h-[320px] flex-1 lg:min-h-0">
           {rightTab === 'explain' ? (
             <div key="explain" className="h-full animate-fade-in">
               {plan ? (
                 <ExplainPanel plan={plan} />
               ) : (
-                <div className="flex h-full items-center justify-center p-4 text-center text-sm text-muted-foreground">
-                  Build a plan to see its explanation, pseudo-code, and JSON here.
+                <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-muted-foreground">
+                    <Wand2 size={20} />
+                  </div>
+                  <p className="max-w-xs text-sm text-muted-foreground">
+                    Build a plan to see its explanation, pseudo-code, and JSON here.
+                  </p>
                 </div>
               )}
             </div>

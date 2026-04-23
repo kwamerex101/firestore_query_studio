@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import { IpcChannels } from '@shared/types/ipc';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
+import { IpcChannels, StreamEventChannels } from '@shared/types/ipc';
 
 const invoke = (channel: string, payload?: unknown) => ipcRenderer.invoke(channel, payload);
 
@@ -8,6 +8,8 @@ const invoke = (channel: string, payload?: unknown) => ipcRenderer.invoke(channe
  * for compile-time inference; at runtime we just call ipcRenderer.invoke.
  */
 const api = {
+  /** See `FqsApi['ipcInvoke']` — used by the Electron transport when `db` is stale after HMR. */
+  ipcInvoke: invoke,
   profiles: {
     list: () => invoke(IpcChannels.profilesList, undefined),
     create: (input: unknown) => invoke(IpcChannels.profilesCreate, input),
@@ -38,12 +40,21 @@ const api = {
   },
   plan: {
     build: (input: unknown) => invoke(IpcChannels.planBuild, input),
+    buildSql: (input: unknown) => invoke(IpcChannels.planBuildSql, input),
   },
   execute: {
     run: (input: unknown) => invoke(IpcChannels.executeRun, input),
   },
   collections: {
     list: () => invoke(IpcChannels.collectionsList, undefined),
+  },
+  db: {
+    testConnection: (input?: unknown) => invoke(IpcChannels.dbTestConnection, input ?? {}),
+    probeSqlDatabases: (input: unknown) => invoke(IpcChannels.dbProbeSqlDatabases, input),
+    probeSqlSchemas: (input: unknown) => invoke(IpcChannels.dbProbeSqlSchemas, input),
+    listContainers: () => invoke(IpcChannels.dbListContainers, undefined),
+    executeSql: (input: unknown) => invoke(IpcChannels.dbExecuteSql, input),
+    sampleTable: (input: unknown) => invoke(IpcChannels.dbSampleTable, input),
   },
   history: {
     list: (input: unknown) => invoke(IpcChannels.historyList, input ?? {}),
@@ -54,6 +65,76 @@ const api = {
   },
   insights: {
     generate: (input: unknown) => invoke(IpcChannels.insightsGenerate, input),
+  },
+  visuals: {
+    generate: (input: unknown) => invoke(IpcChannels.visualsGenerate, input),
+  },
+  streams: {
+    sqlStart: (input: unknown) => invoke(IpcChannels.sqlStreamStart, input),
+    executeStart: (input: unknown) => invoke(IpcChannels.executeStreamStart, input),
+    cancel: (runId: string) => invoke(IpcChannels.streamCancel, { runId }),
+    subscribe: (
+      runId: string,
+      handlers: {
+        onBatch?: (evt: unknown) => void;
+        onDone?: (evt: unknown) => void;
+        onError?: (evt: unknown) => void;
+      },
+    ) => {
+      const batchChan = StreamEventChannels.batch(runId);
+      const doneChan = StreamEventChannels.done(runId);
+      const errorChan = StreamEventChannels.error(runId);
+      const batchListener = (_e: IpcRendererEvent, evt: unknown) => handlers.onBatch?.(evt);
+      const doneListener = (_e: IpcRendererEvent, evt: unknown) => handlers.onDone?.(evt);
+      const errorListener = (_e: IpcRendererEvent, evt: unknown) => handlers.onError?.(evt);
+      ipcRenderer.on(batchChan, batchListener);
+      ipcRenderer.on(doneChan, doneListener);
+      ipcRenderer.on(errorChan, errorListener);
+      return () => {
+        ipcRenderer.off(batchChan, batchListener);
+        ipcRenderer.off(doneChan, doneListener);
+        ipcRenderer.off(errorChan, errorListener);
+      };
+    },
+  },
+  export: {
+    start: (input: unknown) => invoke(IpcChannels.exportStart, input),
+    cancel: (runId: string) => invoke(IpcChannels.exportCancel, { runId }),
+    subscribe: (
+      runId: string,
+      handlers: {
+        onProgress?: (evt: unknown) => void;
+        onDone?: (evt: unknown) => void;
+        onError?: (evt: unknown) => void;
+      },
+    ) => {
+      const progressChan = StreamEventChannels.exportProgress(runId);
+      const doneChan = StreamEventChannels.exportDone(runId);
+      const errorChan = StreamEventChannels.exportError(runId);
+      const progressListener = (_e: IpcRendererEvent, evt: unknown) =>
+        handlers.onProgress?.(evt);
+      const doneListener = (_e: IpcRendererEvent, evt: unknown) => handlers.onDone?.(evt);
+      const errorListener = (_e: IpcRendererEvent, evt: unknown) => handlers.onError?.(evt);
+      ipcRenderer.on(progressChan, progressListener);
+      ipcRenderer.on(doneChan, doneListener);
+      ipcRenderer.on(errorChan, errorListener);
+      return () => {
+        ipcRenderer.off(progressChan, progressListener);
+        ipcRenderer.off(doneChan, doneListener);
+        ipcRenderer.off(errorChan, errorListener);
+      };
+    },
+  },
+  dialog: {
+    // Resolve an absolute filesystem path for a File obtained from a drag-drop
+    // or <input type="file">. Replaces the legacy `file.path` property which
+    // is not exposed under contextIsolation.
+    getPathForFile: (file: File) => webUtils.getPathForFile(file),
+    pickServiceAccount: () => invoke(IpcChannels.dialogPickServiceAccount, undefined),
+    validateServiceAccount: (input: unknown) =>
+      invoke(IpcChannels.dialogValidateServiceAccount, input),
+    importServiceAccount: (input: unknown) =>
+      invoke(IpcChannels.dialogImportServiceAccount, input),
   },
 } as const;
 

@@ -1,0 +1,25 @@
+---
+description: Before commit or push—no secrets or real PII in code; use env and placeholders.
+alwaysApply: true
+---
+
+# Security & privacy before GitHub push
+
+When preparing **commits, pushes, or PRs**, scan changes for leaks. If you find any, remove or redact before the user ships.
+
+## Do not commit
+
+- **Secrets**: `sk-`, `AIza…`, `ghp_`/`gho_`, `xox[pb]-`, long `Bearer` tokens, AWS `AKIA` + secret, npm/publish tokens, private key blocks (`-----BEGIN … PRIVATE KEY-----`), service account JSON with `private_key` inlined.
+- **Live credentials in strings**: DB URLs with real passwords; Admin/Firebase **server** credentials; Cursor or other local API keys in source.
+- **Real PII** in code, tests, or fixtures: real emails, phones, addresses, government IDs, or identifying real individuals. Prefer `example.com`, `555-0100`, fake org names.
+
+## Prefer instead
+
+- Env vars, existing app secret storage (`userData`, profile/secret patterns in this repo), or public config only where appropriate.
+- For docs: obvious placeholders.
+
+## Limits of this rule
+
+This is **human/AI review guidance**, not a scanner. Recommend **gitleaks**, **trufflehog**, or **GitHub secret scanning** in CI for enforcement.
+
+Red flag: new string literals named `password`, `apiKey`, `secret`, `token`, or large base64 blobs—unless clearly test dummies.
