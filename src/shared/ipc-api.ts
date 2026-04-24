@@ -14,6 +14,9 @@ import {
   CursorGetResult,
   CursorListModelsResult,
   CursorTestOutcome,
+  ClaudeGetResult,
+  ClaudeListModelsResult,
+  ClaudeTestOutcome,
   ProviderResult,
   HistoryListRequest,
   HistoryListResult,
@@ -60,6 +63,7 @@ import {
   ProfileUpdate,
   LlmSettings,
   CursorSettings,
+  ClaudeSettings,
   LlmProvider,
 } from './types/profile';
 import { CollectionSchema } from './types/schema';
@@ -133,6 +137,22 @@ export const ipcApi = {
   [IpcChannels.cursorTest]: {
     request: CursorSettings.optional(),
     response: CursorTestOutcome,
+  },
+  [IpcChannels.claudeGet]: {
+    request: Void,
+    response: ClaudeGetResult,
+  },
+  [IpcChannels.claudeSet]: {
+    request: ClaudeSettings,
+    response: ClaudeGetResult,
+  },
+  [IpcChannels.claudeListModels]: {
+    request: Void,
+    response: ClaudeListModelsResult,
+  },
+  [IpcChannels.claudeTest]: {
+    request: ClaudeSettings.optional(),
+    response: ClaudeTestOutcome,
   },
   [IpcChannels.providerGet]: {
     request: Void,

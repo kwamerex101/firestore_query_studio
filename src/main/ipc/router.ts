@@ -15,6 +15,8 @@ import {
   setLlmSettings,
   getCursorSettings,
   setCursorSettings,
+  getClaudeSettings,
+  setClaudeSettings,
   getActiveProvider,
   setActiveProvider,
 } from '../profiles/secrets';
@@ -59,6 +61,7 @@ import { probeSqlDatabases, probeSqlSchemas } from '../drivers';
 import type { SqlProbeConfig } from '../drivers/types';
 import { chat, LlmError } from '../llm/openaiCompat';
 import { listCursorModels, testCursorCli } from '../llm/cursorCli';
+import { listClaudeModels, testClaudeCli } from '../llm/claudeCli';
 import {
   addHistoryEntry,
   clearHistory,
@@ -328,6 +331,64 @@ export function registerIpcHandlers(): void {
     return testCursorCli(effective);
   });
 
+  register(IpcChannels.claudeGet, async () => {
+    const s = await getClaudeSettings();
+    if (!s) return { isConfigured: false };
+    return {
+      isConfigured: true,
+      command: s.command,
+      model: s.model,
+      permissionMode: s.permissionMode,
+      extraArgs: s.extraArgs,
+      cwd: s.cwd,
+      envVars: s.envVars,
+      timeoutMs: s.timeoutMs,
+    };
+  });
+
+  register(IpcChannels.claudeSet, async (input) => {
+    const saved = await setClaudeSettings(input);
+    return {
+      isConfigured: true,
+      command: saved.command,
+      model: saved.model,
+      permissionMode: saved.permissionMode,
+      extraArgs: saved.extraArgs,
+      cwd: saved.cwd,
+      envVars: saved.envVars,
+      timeoutMs: saved.timeoutMs,
+    };
+  });
+
+  register(IpcChannels.claudeListModels, async () => {
+    const s = await getClaudeSettings();
+    if (!s) {
+      // Surface the fallback list even when the CLI isn't configured yet so
+      // the Settings dropdown has something to show pre-save.
+      return listClaudeModels({
+        command: 'claude',
+        model: 'sonnet',
+        permissionMode: 'default',
+        extraArgs: [],
+        envVars: {},
+        timeoutMs: 60_000,
+      });
+    }
+    return listClaudeModels(s);
+  });
+
+  register(IpcChannels.claudeTest, async (input) => {
+    const effective = input ?? (await getClaudeSettings());
+    if (!effective) {
+      return {
+        ok: false as const,
+        code: 'NOT_CONFIGURED',
+        message: 'Configure the Claude CLI before running a test.',
+      };
+    }
+    return testClaudeCli(effective);
+  });
+
   register(IpcChannels.providerGet, async () => {
     const provider = await getActiveProvider();
     return { provider };
@@ -389,6 +450,7 @@ export function registerIpcHandlers(): void {
     const provider = await getActiveProvider();
     const settings = await getLlmSettings();
     const cursorSettings = await getCursorSettings();
+    const claudeSettings = await getClaudeSettings();
 
     if (provider === 'openai-compat' && (!settings || !settings.apiKey)) {
       return {
@@ -404,6 +466,14 @@ export function registerIpcHandlers(): void {
         code: 'CURSOR_NOT_CONFIGURED',
         message:
           'Configure the Cursor CLI in Settings → Cursor CLI, or switch back to an OpenAI-compatible endpoint in Settings → LLM.',
+      };
+    }
+    if (provider === 'claude-cli' && !claudeSettings) {
+      return {
+        ok: false,
+        code: 'CLAUDE_NOT_CONFIGURED',
+        message:
+          'Configure the Claude CLI in Settings → Claude CLI, or switch back to an OpenAI-compatible endpoint in Settings → LLM.',
       };
     }
 
@@ -434,7 +504,10 @@ export function registerIpcHandlers(): void {
         }
       }
     }
-    return buildPlan({ provider, settings, cursorSettings, schema }, input);
+    return buildPlan(
+      { provider, settings, cursorSettings, claudeSettings, schema },
+      input,
+    );
   });
 
   register(IpcChannels.executeRun, async ({ plan }) => {
@@ -560,6 +633,7 @@ export function registerIpcHandlers(): void {
     const provider = await getActiveProvider();
     const settings = await getLlmSettings();
     const cursorSettings = await getCursorSettings();
+    const claudeSettings = await getClaudeSettings();
     if (provider === 'openai-compat' && (!settings || !settings.apiKey)) {
       return {
         ok: false,
@@ -576,12 +650,21 @@ export function registerIpcHandlers(): void {
           'Configure the Cursor CLI in Settings → Cursor CLI, or switch back to an OpenAI-compatible endpoint in Settings → LLM.',
       };
     }
+    if (provider === 'claude-cli' && !claudeSettings) {
+      return {
+        ok: false,
+        code: 'CLAUDE_NOT_CONFIGURED',
+        message:
+          'Configure the Claude CLI in Settings → Claude CLI, or switch back to an OpenAI-compatible endpoint in Settings → LLM.',
+      };
+    }
     const driver = await getSqlDriverForActive();
     return buildSqlPlan(
       {
         provider,
         settings,
         cursorSettings,
+        claudeSettings,
         driver,
         defaultLimit: profile.defaultLimit,
       },
@@ -645,14 +728,22 @@ export function registerIpcHandlers(): void {
     const provider = await getActiveProvider();
     const settings = await getLlmSettings();
     const cursorSettings = await getCursorSettings();
-    return generateInsights({ provider, settings, cursorSettings }, input);
+    const claudeSettings = await getClaudeSettings();
+    return generateInsights(
+      { provider, settings, cursorSettings, claudeSettings },
+      input,
+    );
   });
 
   register(IpcChannels.visualsGenerate, async (input) => {
     const provider = await getActiveProvider();
     const settings = await getLlmSettings();
     const cursorSettings = await getCursorSettings();
-    return generateVisuals({ provider, settings, cursorSettings }, input);
+    const claudeSettings = await getClaudeSettings();
+    return generateVisuals(
+      { provider, settings, cursorSettings, claudeSettings },
+      input,
+    );
   });
 
   register(IpcChannels.dialogPickServiceAccount, async () => {

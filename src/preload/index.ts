@@ -29,6 +29,12 @@ const api = {
     listModels: () => invoke(IpcChannels.cursorListModels, undefined),
     test: (input?: unknown) => invoke(IpcChannels.cursorTest, input),
   },
+  claude: {
+    get: () => invoke(IpcChannels.claudeGet, undefined),
+    set: (input: unknown) => invoke(IpcChannels.claudeSet, input),
+    listModels: () => invoke(IpcChannels.claudeListModels, undefined),
+    test: (input?: unknown) => invoke(IpcChannels.claudeTest, input),
+  },
   provider: {
     get: () => invoke(IpcChannels.providerGet, undefined),
     set: (input: unknown) => invoke(IpcChannels.providerSet, input),

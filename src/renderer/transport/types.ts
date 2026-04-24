@@ -56,6 +56,16 @@ export type FqsApi = {
       req?: IpcRequest<typeof IpcChannels.cursorTest>,
     ): Promise<IpcResponse<typeof IpcChannels.cursorTest>>;
   };
+  claude: {
+    get(): Promise<IpcResponse<typeof IpcChannels.claudeGet>>;
+    set(
+      req: IpcRequest<typeof IpcChannels.claudeSet>,
+    ): Promise<IpcResponse<typeof IpcChannels.claudeSet>>;
+    listModels(): Promise<IpcResponse<typeof IpcChannels.claudeListModels>>;
+    test(
+      req?: IpcRequest<typeof IpcChannels.claudeTest>,
+    ): Promise<IpcResponse<typeof IpcChannels.claudeTest>>;
+  };
   provider: {
     get(): Promise<IpcResponse<typeof IpcChannels.providerGet>>;
     set(

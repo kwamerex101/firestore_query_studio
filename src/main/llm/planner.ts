@@ -2,6 +2,7 @@ import type {
   LlmSettings,
   LlmProvider,
   CursorSettings,
+  ClaudeSettings,
 } from '@shared/types/profile';
 import type { CollectionSchema } from '@shared/types/schema';
 import type { PlanBuildOutcome, PlanRequest } from '@shared/types/ipc';
@@ -11,11 +12,13 @@ import {
   type ChatBackend,
 } from '@shared/planner';
 import { chatViaCursor } from './cursorCli';
+import { chatViaClaude } from './claudeCli';
 
 export interface PlannerDeps {
   provider: LlmProvider;
   settings: LlmSettings | null;
   cursorSettings: CursorSettings | null;
+  claudeSettings: ClaudeSettings | null;
   schema?: CollectionSchema | null;
 }
 
@@ -82,6 +85,37 @@ function resolveBackend(deps: PlannerDeps): BackendResolution {
         retries: 0,
         // Cursor CLI can't honour `response_format: json_object`; the planner
         // still falls back to `extractJsonObject` on the raw text.
+        responseFormatJson: false,
+      },
+    };
+  }
+
+  if (deps.provider === 'claude-cli') {
+    if (!deps.claudeSettings) {
+      return {
+        ok: false,
+        outcome: {
+          ok: false,
+          code: 'CLAUDE_NOT_CONFIGURED',
+          message:
+            'Claude CLI provider is selected but no Claude settings are saved. Open Settings → Claude CLI to configure it.',
+        },
+      };
+    }
+    const timeoutMs = deps.claudeSettings.timeoutMs ?? 60_000;
+    return {
+      ok: true,
+      chat: (messages, opts) =>
+        chatViaClaude(deps.claudeSettings!, {
+          messages,
+          timeoutMs: opts.timeoutMs ?? timeoutMs,
+        }),
+      overrides: {
+        timeoutMs,
+        retries: 0,
+        // The Claude CLI returns a single JSON object from
+        // `--output-format json`; we extract `result` as text and let the
+        // planner's lenient JSON extractor pull the plan out of that.
         responseFormatJson: false,
       },
     };

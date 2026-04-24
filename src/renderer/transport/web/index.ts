@@ -102,6 +102,23 @@ const api: FqsApi = {
       elapsedMs: 0,
     }),
   },
+  claude: {
+    // The Claude CLI spawns a Node child process; browsers can't do that.
+    // Returning a disabled stub keeps the provider switcher safe on web.
+    get: async () => ({ isConfigured: false }),
+    set: async () => {
+      throw new Error(
+        'Claude CLI is only available in the desktop app. Use an OpenAI-compatible endpoint in the web build.',
+      );
+    },
+    listModels: async () => ({ models: [], source: 'fallback' as const }),
+    test: async () => ({
+      ok: false,
+      code: 'UNSUPPORTED',
+      message:
+        'The Claude CLI provider is only available in the desktop app. Use an OpenAI-compatible endpoint in the web build.',
+    }),
+  },
   provider: {
     get: () => providerGet(),
     set: (req) => providerSet(req),

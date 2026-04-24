@@ -397,7 +397,7 @@ export const LlmSettings = z.object({
 });
 export type LlmSettings = z.infer<typeof LlmSettings>;
 
-export const LlmProvider = z.enum(['openai-compat', 'cursor-cli']);
+export const LlmProvider = z.enum(['openai-compat', 'cursor-cli', 'claude-cli']);
 export type LlmProvider = z.infer<typeof LlmProvider>;
 
 export const CursorMode = z.enum(['default', 'plan', 'ask']);
@@ -414,6 +414,37 @@ export const CursorSettings = z.object({
   timeoutMs: z.number().int().positive().min(1_000).max(600_000).default(60_000),
 });
 export type CursorSettings = z.infer<typeof CursorSettings>;
+
+/**
+ * Permission mode passed to the Claude CLI's `--permission-mode` flag.
+ * Planner calls should always use `plan` or `acceptEdits` sparingly since we
+ * only ever read the model's text response — tool execution isn't wired up.
+ */
+export const ClaudePermissionMode = z.enum([
+  'default',
+  'acceptEdits',
+  'bypassPermissions',
+  'plan',
+]);
+export type ClaudePermissionMode = z.infer<typeof ClaudePermissionMode>;
+
+export const ClaudeSettings = z.object({
+  /** Executable path. `claude` relies on PATH resolution. */
+  command: z.string().min(1).default('claude'),
+  /** Model alias (`sonnet`, `opus`, `haiku`) or full model id. `auto` = CLI default. */
+  model: z.string().min(1).default('sonnet'),
+  /** Permission mode handed to the CLI. */
+  permissionMode: ClaudePermissionMode.default('default'),
+  /** Extra CLI flags; forwarded verbatim after our built-in args. */
+  extraArgs: z.array(z.string()).default([]),
+  /** Working directory for the spawned process. */
+  cwd: z.string().optional(),
+  /** Env vars exposed to the Claude CLI process (e.g. `ANTHROPIC_API_KEY`). */
+  envVars: z.record(z.string()).default({}),
+  /** Claude CLI cold starts can be slow on first run; default 60s. */
+  timeoutMs: z.number().int().positive().min(1_000).max(600_000).default(60_000),
+});
+export type ClaudeSettings = z.infer<typeof ClaudeSettings>;
 
 // Narrowing helpers used across the main process and renderer.
 export function isFirestoreProfile(p: Profile): p is FirestoreProfile {
