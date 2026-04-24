@@ -22,7 +22,7 @@ import { maybeNotifySlowQuery } from '../lib/slackNotify';
 import { cn } from '../lib/utils';
 
 interface SqlQueryPanelProps {
-  profile: Profile & { engine: 'postgres' | 'mysql' | 'mssql' };
+  profile: Profile & { engine: 'postgres' | 'mysql' | 'mssql' | 'bigquery' };
   hasLlmConfigured: boolean;
 }
 

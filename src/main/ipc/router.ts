@@ -142,7 +142,14 @@ async function resolveProbeCfg(args: {
 
   if (profileId) {
     const saved = await getProfile(profileId);
-    if (saved && isSqlProfile(saved)) {
+    // BigQuery authenticates via service-account JSON / ADC, not host/port/user,
+    // so the shared "probe config" flow doesn't apply. Callers that need to
+    // list BigQuery datasets should go through a dedicated path.
+    if (
+      saved &&
+      isSqlProfile(saved) &&
+      saved.engine !== 'bigquery'
+    ) {
       engine = engine ?? (saved.engine as SqlDialect);
       host = host ?? saved.host;
       port = port ?? saved.port;

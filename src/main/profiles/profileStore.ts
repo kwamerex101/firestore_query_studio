@@ -12,6 +12,7 @@ import {
   PostgresProfile,
   MysqlProfile,
   MssqlProfile,
+  BigQueryProfile,
 } from '@shared/types/profile';
 import { clearProfileSecret, setProfileSecret } from './secrets';
 import { removeImportedServiceAccount } from '../dialogs/serviceAccount';
@@ -151,7 +152,27 @@ export async function createProfile(input: ProfileInput): Promise<Profile> {
       createdAt: now,
       updatedAt: now,
     });
-  } else if (parsed.kind === 'live') {
+  } else if ('engine' in parsed && parsed.engine === 'bigquery') {
+    if (parsed.serviceAccountPath && !existsSync(parsed.serviceAccountPath)) {
+      throw new Error(
+        `Service-account file not found: ${parsed.serviceAccountPath}`,
+      );
+    }
+    profile = BigQueryProfile.parse({
+      id,
+      engine: 'bigquery',
+      name: parsed.name,
+      envTag: parsed.envTag,
+      projectId: parsed.projectId,
+      serviceAccountPath: parsed.serviceAccountPath ?? '',
+      defaultDataset: parsed.defaultDataset ?? '',
+      location: parsed.location ?? '',
+      queryTimeoutMs: parsed.queryTimeoutMs ?? 60_000,
+      defaultLimit: parsed.defaultLimit ?? 500,
+      createdAt: now,
+      updatedAt: now,
+    });
+  } else if ('kind' in parsed && parsed.kind === 'live') {
     if (!existsSync(parsed.serviceAccountPath)) {
       throw new Error(`Service-account file not found: ${parsed.serviceAccountPath}`);
     }
@@ -278,6 +299,25 @@ export async function updateProfile(id: string, update: ProfileUpdate): Promise<
       hasPassword,
       updatedAt: now,
     });
+    all[idx] = next;
+  } else if (current.engine === 'bigquery') {
+    const next = BigQueryProfile.parse({
+      ...current,
+      name: parsed.name ?? current.name,
+      envTag: parsed.envTag ?? current.envTag,
+      projectId: parsed.projectId ?? current.projectId,
+      serviceAccountPath: parsed.serviceAccountPath ?? current.serviceAccountPath,
+      defaultDataset: parsed.defaultDataset ?? current.defaultDataset,
+      location: parsed.location ?? current.location,
+      queryTimeoutMs: parsed.queryTimeoutMs ?? current.queryTimeoutMs,
+      defaultLimit: parsed.defaultLimit ?? current.defaultLimit,
+      updatedAt: now,
+    });
+    if (next.serviceAccountPath && !existsSync(next.serviceAccountPath)) {
+      throw new Error(
+        `Service-account file not found: ${next.serviceAccountPath}`,
+      );
+    }
     all[idx] = next;
   } else if (current.kind === 'live') {
     const next = LiveProfile.parse({

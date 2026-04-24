@@ -7,6 +7,10 @@ export const capabilities: TransportCapabilities = {
   postgresProfiles: false,
   mysqlProfiles: false,
   mssqlProfiles: false,
+  // BigQuery auth requires reading a service-account JSON from disk; the
+  // browser can't resolve file paths reliably and bundle size wants to stay
+  // lean. Desktop-only.
+  bigQueryProfiles: false,
   // The Cursor CLI is a local binary spawned via `node:child_process`.
   // Browsers obviously cannot do this; hide the Cursor provider picker.
   cursorCli: false,

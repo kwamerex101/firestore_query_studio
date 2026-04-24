@@ -83,6 +83,10 @@ export type FormState = {
   mssqlEncrypt: boolean;
   mssqlTrustServerCertificate: boolean;
   mssqlInstanceName: string;
+
+  // BigQuery-only
+  bqDefaultDataset: string;
+  bqLocation: string;
 };
 
 export const emptyForm: FormState = {
@@ -113,6 +117,9 @@ export const emptyForm: FormState = {
   mssqlEncrypt: true,
   mssqlTrustServerCertificate: false,
   mssqlInstanceName: '',
+
+  bqDefaultDataset: '',
+  bqLocation: '',
 };
 
 export function defaultPortFor(engine: Engine): string {
@@ -185,6 +192,19 @@ export function buildProfileInputFromForm(form: FormState): ProfileInput {
     return form.sqlPassword.length > 0
       ? { ...base, password: form.sqlPassword }
       : base;
+  }
+  if (form.engine === 'bigquery') {
+    return {
+      engine: 'bigquery' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      projectId: form.projectId.trim(),
+      serviceAccountPath: form.serviceAccountPath.trim(),
+      defaultDataset: form.bqDefaultDataset.trim(),
+      location: form.bqLocation.trim(),
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 60_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
   }
   const base = {
     name: form.name.trim(),
@@ -295,6 +315,19 @@ export function ProfilesPage() {
         mssqlTrustServerCertificate: p.trustServerCertificate,
         mssqlInstanceName: p.instanceName ?? '',
       });
+    } else if (p.engine === 'bigquery') {
+      setForm({
+        ...emptyForm,
+        name: p.name,
+        engine: 'bigquery',
+        envTag: p.envTag,
+        projectId: p.projectId,
+        serviceAccountPath: p.serviceAccountPath,
+        bqDefaultDataset: p.defaultDataset,
+        bqLocation: p.location,
+        queryTimeoutMs: String(p.queryTimeoutMs),
+        defaultLimit: String(p.defaultLimit),
+      });
     } else {
       setForm({
         ...emptyForm,
@@ -386,6 +419,20 @@ export function ProfilesPage() {
               form.sqlPassword.length > 0 ? form.sqlPassword : undefined,
           };
           await ipc.profiles.update({ id: editing.id, update });
+        } else if (editing.engine === 'bigquery') {
+          await ipc.profiles.update({
+            id: editing.id,
+            update: {
+              name,
+              envTag: form.envTag,
+              projectId: form.projectId.trim(),
+              serviceAccountPath: form.serviceAccountPath.trim(),
+              defaultDataset: form.bqDefaultDataset.trim(),
+              location: form.bqLocation.trim(),
+              queryTimeoutMs: Number(form.queryTimeoutMs) || 60_000,
+              defaultLimit: Number(form.defaultLimit) || 500,
+            },
+          });
         } else if (editing.kind === 'live') {
           const resolvedPath = await resolveServiceAccountPath(editing.id);
           await ipc.profiles.update({
@@ -694,6 +741,9 @@ export function ProfilesPage() {
                 {capabilities.mssqlProfiles ? (
                   <option value="mssql">Microsoft SQL Server</option>
                 ) : null}
+                {capabilities.bigQueryProfiles ? (
+                  <option value="bigquery">Google BigQuery</option>
+                ) : null}
               </Select>
             </div>
             <div>
@@ -735,7 +785,7 @@ export function ProfilesPage() {
               showPassword={showPassword}
               setShowPassword={setShowPassword}
             />
-          ) : (
+          ) : form.engine === 'mssql' ? (
             <MssqlFields
               form={form}
               setForm={setForm}
@@ -743,6 +793,8 @@ export function ProfilesPage() {
               showPassword={showPassword}
               setShowPassword={setShowPassword}
             />
+          ) : (
+            <BigQueryFields form={form} setForm={setForm} />
           )}
         </div>
       </Dialog>
@@ -830,6 +882,32 @@ function ProfileCardDetails({ profile }: { profile: Profile }) {
       </div>
     );
   }
+  if (profile.engine === 'bigquery') {
+    return (
+      <div className="text-xs text-muted-foreground">
+        <div className="truncate">
+          <span className="font-mono">{profile.projectId}</span>
+          {profile.defaultDataset && (
+            <> · dataset <span className="font-mono">{profile.defaultDataset}</span></>
+          )}
+        </div>
+        <div className="truncate" title={profile.serviceAccountPath || 'Using Application Default Credentials'}>
+          auth{' '}
+          <span className="font-mono">
+            {profile.serviceAccountPath ? 'service account' : 'ADC'}
+          </span>
+          {profile.location && (
+            <> · location <span className="font-mono">{profile.location}</span></>
+          )}
+        </div>
+        <div>
+          timeout <span className="font-mono">{profile.queryTimeoutMs}ms</span> · limit{' '}
+          <span className="font-mono">{profile.defaultLimit}</span>
+        </div>
+      </div>
+    );
+  }
+  // Firestore fallback.
   return (
     <div className="text-xs text-muted-foreground">
       <div>
@@ -970,7 +1048,8 @@ function SqlConnectionFields({
   databasePlaceholder,
   userPlaceholder,
 }: SqlFieldsProps & {
-  engine: SqlDialect;
+  /** Only the networked SQL engines have host/port/user — BigQuery uses service-account auth. */
+  engine: Exclude<SqlDialect, 'bigquery'>;
   hostPlaceholder?: string;
   databasePlaceholder?: string;
   userPlaceholder?: string;
@@ -1222,6 +1301,92 @@ function MssqlFields(props: SqlFieldsProps) {
   );
 }
 
+function BigQueryFields({
+  form,
+  setForm,
+}: {
+  form: FormState;
+  setForm: (next: FormState) => void;
+}) {
+  return (
+    <>
+      <div>
+        <label className="label">Google Cloud project ID</label>
+        <Input
+          value={form.projectId}
+          onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+          placeholder="my-analytics-project"
+        />
+        <HelpNotice>
+          Find it in the{' '}
+          <ExternalAnchor href="https://console.cloud.google.com/">
+            Google Cloud console
+          </ExternalAnchor>
+          . BigQuery bills the project that owns the query, which is often the same
+          project that owns the datasets but doesn't have to be.
+        </HelpNotice>
+      </div>
+      <div>
+        <ServiceAccountPicker
+          value={form.serviceAccountPath}
+          onChange={(path) => setForm({ ...form, serviceAccountPath: path })}
+          projectId={form.projectId}
+          importCopy={form.importCopy}
+          onImportChange={(next) => setForm({ ...form, importCopy: next })}
+        />
+        <HelpNotice>
+          Leave blank to use{' '}
+          <span className="font-medium">Application Default Credentials</span>{' '}
+          (the <span className="font-mono">gcloud auth application-default login</span>{' '}
+          session on this machine). Otherwise pick a service account with{' '}
+          <span className="font-mono">BigQuery Data Viewer</span> +{' '}
+          <span className="font-mono">BigQuery Job User</span> roles.
+        </HelpNotice>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label">Default dataset</label>
+          <Input
+            value={form.bqDefaultDataset}
+            onChange={(e) => setForm({ ...form, bqDefaultDataset: e.target.value })}
+            placeholder="analytics_prod"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Optional. Scopes the Profiles → table list and sample picker to a single dataset.
+          </p>
+        </div>
+        <div>
+          <label className="label">Location</label>
+          <Input
+            value={form.bqLocation}
+            onChange={(e) => setForm({ ...form, bqLocation: e.target.value })}
+            placeholder="US · EU · us-central1"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            BigQuery billing location. Leave blank to let the client infer.
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label">Query timeout (ms)</label>
+          <Input
+            value={form.queryTimeoutMs}
+            onChange={(e) => setForm({ ...form, queryTimeoutMs: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="label">Default row limit</label>
+          <Input
+            value={form.defaultLimit}
+            onChange={(e) => setForm({ ...form, defaultLimit: e.target.value })}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
 /**
  * Prominent “Test connection” control: uses the default `btn` surface (border +
  * background + hover) so it reads as an action, not link text. Status appears
@@ -1459,7 +1624,7 @@ type ProbeStatus = 'idle' | 'loading' | 'ok' | 'err';
  */
 function buildProbeDraft(
   form: FormState,
-  engine: SqlDialect,
+  engine: Exclude<SqlDialect, 'bigquery'>,
   editing: Profile | null,
 ): SqlProbeDraft | null {
   const host = form.sqlHost.trim();
@@ -1495,7 +1660,7 @@ function buildProbeDraft(
 
 function probeRequestFor(
   form: FormState,
-  engine: SqlDialect,
+  engine: Exclude<SqlDialect, 'bigquery'>,
   editing: Profile | null,
 ): { profileId?: string; draft?: SqlProbeDraft } | null {
   const draft = buildProbeDraft(form, engine, editing);
@@ -1526,7 +1691,7 @@ function DatabaseCombobox({
   form: FormState;
   setForm: (next: FormState) => void;
   editing: Profile | null;
-  engine: SqlDialect;
+  engine: Exclude<SqlDialect, 'bigquery'>;
   placeholder?: string;
 }) {
   const [status, setStatus] = useState<ProbeStatus>('idle');
@@ -1631,7 +1796,7 @@ function SchemaCombobox({
   form: FormState;
   setForm: (next: FormState) => void;
   editing: Profile | null;
-  engine: SqlDialect;
+  engine: Exclude<SqlDialect, 'bigquery'>;
   placeholder?: string;
 }) {
   const [status, setStatus] = useState<ProbeStatus>('idle');

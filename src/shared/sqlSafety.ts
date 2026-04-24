@@ -193,7 +193,7 @@ export function clampLimit(
   const trimmed = sql.trim().replace(/;+\s*$/, '');
   if (!trimmed) return sql;
 
-  if (dialect === 'postgres' || dialect === 'mysql') {
+  if (dialect === 'postgres' || dialect === 'mysql' || dialect === 'bigquery') {
     const limitRegex = /\blimit\s+(\d+)(?:\s+offset\s+\d+)?\s*$/i;
     const match = trimmed.match(limitRegex);
     if (match) {

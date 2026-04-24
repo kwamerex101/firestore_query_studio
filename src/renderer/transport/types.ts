@@ -196,6 +196,8 @@ export interface TransportCapabilities {
   readonly mysqlProfiles: boolean;
   /** Desktop supports SQL Server via the `mssql` package; web cannot. */
   readonly mssqlProfiles: boolean;
+  /** Desktop supports Google BigQuery via `@google-cloud/bigquery`; web cannot. */
+  readonly bigQueryProfiles: boolean;
   /** Desktop supports Cursor CLI as a planner backend; web cannot. */
   readonly cursorCli: boolean;
   /** Web uses IndexedDB with a device-scoped key, which is weaker than the OS keychain. */

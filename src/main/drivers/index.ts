@@ -1,4 +1,5 @@
 import {
+  isBigQueryProfile,
   isFirestoreProfile,
   isMssqlProfile,
   isMysqlProfile,
@@ -25,6 +26,7 @@ import { getProfileSecret } from '../profiles/secrets';
 let postgresMod: typeof import('./postgres') | null = null;
 let mysqlMod: typeof import('./mysql') | null = null;
 let mssqlMod: typeof import('./mssql') | null = null;
+let bigqueryMod: typeof import('./bigquery') | null = null;
 
 async function loadPostgres() {
   if (!postgresMod) postgresMod = await import('./postgres');
@@ -37,6 +39,10 @@ async function loadMysql() {
 async function loadMssql() {
   if (!mssqlMod) mssqlMod = await import('./mssql');
   return mssqlMod;
+}
+async function loadBigQuery() {
+  if (!bigqueryMod) bigqueryMod = await import('./bigquery');
+  return bigqueryMod;
 }
 
 /**
@@ -70,6 +76,10 @@ export async function createDriver(profile: Profile): Promise<DatabaseDriver> {
     ]);
     return MssqlDriver.connect(profile, password);
   }
+  if (isBigQueryProfile(profile)) {
+    const { BigQueryDriver } = await loadBigQuery();
+    return BigQueryDriver.connect(profile);
+  }
   // Exhaustiveness guard — if Engine gains a variant and nobody updates this
   // file, TypeScript will flag `profile` as `never` right here.
   const _exhaustive: never = profile;
@@ -93,6 +103,16 @@ export async function probeSqlDatabases(
       return (await loadMysql()).probeMysqlDatabases(cfg);
     case 'mssql':
       return (await loadMssql()).probeMssqlDatabases(cfg);
+    case 'bigquery':
+      // BigQuery's "databases" are datasets and use a completely different
+      // auth shape (service-account JSON). Callers should route through
+      // `probeBigQueryDatasets` directly with a dedicated config.
+      return {
+        ok: false,
+        code: 'UNSUPPORTED_ENGINE',
+        message: 'BigQuery dataset listing uses a separate probe.',
+        elapsedMs: 0,
+      };
     default: {
       const _exhaustive: never = engine;
       return {
@@ -126,6 +146,13 @@ export async function probeSqlSchemas(
         ok: false,
         code: 'UNSUPPORTED_ENGINE',
         message: 'MySQL has no distinct schema layer; use the database dropdown.',
+        elapsedMs: 0,
+      };
+    case 'bigquery':
+      return {
+        ok: false,
+        code: 'UNSUPPORTED_ENGINE',
+        message: 'BigQuery datasets map onto the database dropdown, not schemas.',
         elapsedMs: 0,
       };
     default: {

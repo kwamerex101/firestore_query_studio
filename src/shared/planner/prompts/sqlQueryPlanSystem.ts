@@ -21,6 +21,13 @@ const DIALECT_NOTES: Record<SqlDialect, string> = {
 - String literals prefix with \`N\` for NVARCHAR: \`N'hello'\`.
 - Case-insensitive compare depends on the column collation; prefer \`UPPER(col) = UPPER(@value)\` when portability matters.
 - Date helpers: \`SYSUTCDATETIME()\`, \`DATEADD(day, -7, SYSUTCDATETIME())\`, \`CAST(x AS DATE)\`.`,
+  bigquery: `Dialect: Google BigQuery (GoogleSQL).
+- Fully-qualify tables as \`project.dataset.table\` (backticks required when identifiers contain hyphens).
+- Row limits use \`LIMIT N\`. Boolean literals are \`TRUE\` / \`FALSE\`.
+- String functions: \`LOWER()\`, \`REGEXP_CONTAINS(col, r'pattern')\` for case-insensitive substring matching.
+- Date/time: \`CURRENT_TIMESTAMP()\`, \`DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)\`, \`TIMESTAMP_TRUNC(ts, DAY)\`.
+- Cost awareness: prefer filtering on partition / cluster columns (often \`_PARTITIONTIME\`, or explicit \`DATE\` columns). Avoid \`SELECT *\` on wide tables — enumerate only needed columns.
+- Metadata lives in \`INFORMATION_SCHEMA.TABLES\`, \`INFORMATION_SCHEMA.COLUMNS\` scoped per dataset (\`\`project.dataset.INFORMATION_SCHEMA.TABLES\`\`).`,
 };
 
 /**

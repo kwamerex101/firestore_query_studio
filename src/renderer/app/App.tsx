@@ -257,6 +257,18 @@ function EnvStrip() {
             /{activeProfile.database}
           </span>
         </span>
+      ) : activeProfile.engine === 'bigquery' ? (
+        <>
+          <span className="text-muted-foreground">· {activeProfile.projectId}</span>
+          {activeProfile.defaultDataset && (
+            <span className="text-muted-foreground">
+              · dataset <span className="font-mono">{activeProfile.defaultDataset}</span>
+            </span>
+          )}
+          <span className="text-muted-foreground">
+            · {activeProfile.serviceAccountPath ? 'service account' : 'ADC'}
+          </span>
+        </>
       ) : (
         <>
           <span className="text-muted-foreground">· {activeProfile.projectId}</span>

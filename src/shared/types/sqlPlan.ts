@@ -8,7 +8,7 @@ import { z } from 'zod';
  */
 export const SqlPlan = z.object({
   mode: z.literal('sql').default('sql'),
-  dialect: z.enum(['postgres', 'mysql', 'mssql']),
+  dialect: z.enum(['postgres', 'mysql', 'mssql', 'bigquery']),
   /**
    * A single read-only statement (SELECT / WITH / SHOW / EXPLAIN / DESC).
    * The driver re-validates this via `sqlSafety` before executing, so a

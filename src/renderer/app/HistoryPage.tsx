@@ -374,6 +374,7 @@ const engineMeta: Record<Engine, { label: string; icon: LucideIcon }> = {
   postgres: { label: 'Postgres', icon: Database },
   mysql: { label: 'MySQL', icon: Database },
   mssql: { label: 'SQL Server', icon: Database },
+  bigquery: { label: 'BigQuery', icon: Database },
 };
 
 function getDatabaseName(profile: Profile): string {
@@ -381,6 +382,11 @@ function getDatabaseName(profile: Profile): string {
   if (isPostgresProfile(profile)) return profile.database;
   if (isMysqlProfile(profile)) return profile.database;
   if (isMssqlProfile(profile)) return profile.database;
+  if (profile.engine === 'bigquery') {
+    return profile.defaultDataset
+      ? `${profile.projectId}.${profile.defaultDataset}`
+      : profile.projectId;
+  }
   // Exhaustiveness guard — adding a new engine variant will fail here.
   const _exhaustive: never = profile;
   return (_exhaustive as { name?: string }).name ?? '';
