@@ -20,8 +20,9 @@ import type { QueryPlan } from '@shared/types/plan';
 import type { ResultRow, RunOutcome } from '@shared/types/results';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
-import { firestoreRowsToCsv, formatCellText } from '@shared/csv';
+import { firestoreRowsToCsv, firestoreRowsToTsv, formatCellText } from '@shared/csv';
 import { downloadText } from '../lib/download';
+import { copyTsvAndOpenSheets } from '../lib/sheetsExport';
 import { ResultsToolbar, type ResultsViewMode } from './ResultsToolbar';
 import { VisualView } from './VisualView';
 
@@ -247,6 +248,11 @@ export function ResultsTable({
     );
   }
 
+  async function copyForSheets() {
+    const sorted = rowModel.rows.map((r) => r.original);
+    await copyTsvAndOpenSheets(firestoreRowsToTsv(sorted, columnNames), toast);
+  }
+
   // Cache key for the Visual view. `rows` identity changes on every
   // new run, so identity alone is enough for invalidation; we mix in
   // `rows.length` and the first row's id to be extra safe against
@@ -266,6 +272,7 @@ export function ResultsTable({
         onViewChange={setView}
         onDownloadJson={exportJson}
         onDownloadCsv={exportCsv}
+        onCopyForSheets={rows.length > 0 ? copyForSheets : undefined}
         canVisualize={canVisualize}
         visualizeHint={
           canVisualize

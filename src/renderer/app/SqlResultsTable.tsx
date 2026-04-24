@@ -10,8 +10,9 @@ import { Check, Copy } from 'lucide-react';
 import type { SqlColumn, SqlRow } from '@shared/types/ipc';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
-import { formatCellText, sqlRowsToCsv } from '@shared/csv';
+import { formatCellText, sqlRowsToCsv, sqlRowsToTsv } from '@shared/csv';
 import { downloadText } from '../lib/download';
+import { copyTsvAndOpenSheets } from '../lib/sheetsExport';
 import { ResultsToolbar, type ResultsViewMode } from './ResultsToolbar';
 import { VisualView } from './VisualView';
 
@@ -45,6 +46,7 @@ export function SqlResultsTable({
   elapsedMs,
 }: SqlResultsTableProps) {
   const [view, setView] = useState<ResultsViewMode>('table');
+  const toast = useToast();
 
   const canVisualize = rows.length > 0 && !!sql;
   const visualCacheKey = useMemo(() => {
@@ -65,6 +67,9 @@ export function SqlResultsTable({
       'text/csv',
     );
   }
+  async function copyForSheets() {
+    await copyTsvAndOpenSheets(sqlRowsToTsv(rows, columns), toast);
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -84,6 +89,7 @@ export function SqlResultsTable({
         onViewChange={setView}
         onDownloadJson={exportJson}
         onDownloadCsv={exportCsv}
+        onCopyForSheets={rows.length > 0 ? copyForSheets : undefined}
         canVisualize={canVisualize}
         visualizeHint={
           canVisualize

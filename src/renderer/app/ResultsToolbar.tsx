@@ -1,4 +1,4 @@
-import { BarChart3, Braces, Download, Eye, FileJson, FileText, LayoutGrid, Rows3 } from 'lucide-react';
+import { BarChart3, Braces, Download, Eye, FileJson, FileSpreadsheet, FileText, LayoutGrid, Rows3 } from 'lucide-react';
 import {
   Menu,
   MenuContent,
@@ -21,6 +21,8 @@ interface ResultsToolbarProps {
   onViewChange: (next: ResultsViewMode) => void;
   onDownloadJson?: () => void;
   onDownloadCsv?: () => void;
+  /** Copy TSV + open Google Sheets paste target in the browser. */
+  onCopyForSheets?: () => void;
   /** When false, the Visual menu is disabled (e.g. no rows). */
   canVisualize?: boolean;
   visualizeHint?: string;
@@ -40,6 +42,7 @@ export function ResultsToolbar({
   onViewChange,
   onDownloadJson,
   onDownloadCsv,
+  onCopyForSheets,
   canVisualize = true,
   visualizeHint,
 }: ResultsToolbarProps) {
@@ -142,6 +145,15 @@ export function ResultsToolbar({
               onSelect={() => onDownloadCsv?.()}
             >
               CSV
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem
+              icon={FileSpreadsheet}
+              disabled={!onCopyForSheets}
+              description="Copy as TSV + open a new Google Sheet"
+              onSelect={() => onCopyForSheets?.()}
+            >
+              Google Sheets
             </MenuItem>
           </MenuContent>
         </Menu>
