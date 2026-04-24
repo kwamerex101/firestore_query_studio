@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* Dark theme (default) */
+  :root,
+  [data-theme="dark"] {
     --background: 222 47% 7%;
     --foreground: 210 40% 98%;
     --card: 222 40% 10%;
@@ -27,6 +29,33 @@
     --env-dev: 142 71% 45%;
     --env-staging: 38 92% 50%;
     --env-prod: 0 84% 60%;
+  }
+
+  /* Light theme */
+  [data-theme="light"] {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 214 32% 91%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 214 32% 87%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 84%;
+    --input: 214 32% 87%;
+    --ring: 217 91% 50%;
+    --radius: 0.6rem;
+    --env-dev: 142 71% 36%;
+    --env-staging: 38 92% 44%;
+    --env-prod: 0 84% 50%;
   }
 
   html,
@@ -53,8 +82,8 @@
     overflow: hidden;
     /* subtle ambient glow behind the app */
     background-image:
-      radial-gradient(1200px 600px at 80% -10%, hsl(var(--primary) / 0.08), transparent 60%),
-      radial-gradient(900px 500px at -10% 110%, hsl(217 91% 30% / 0.08), transparent 60%);
+      radial-gradient(1200px 600px at 80% -10%, hsl(var(--primary) / 0.07), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, hsl(217 91% 40% / 0.06), transparent 60%);
   }
 
   code,
@@ -94,6 +123,14 @@
   /* Global smooth focus */
   :where(button, [role='button'], a, input, select, textarea) {
     outline: none;
+  }
+
+  /* Ensure 44×44px minimum tap targets on touch screens */
+  @media (pointer: coarse) {
+    .btn {
+      min-height: 44px;
+      min-width: 44px;
+    }
   }
 
   /* Respect reduced motion */

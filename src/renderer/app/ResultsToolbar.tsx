@@ -1,4 +1,4 @@
-import { BarChart3, Braces, Download, Eye, FileJson, FileText, Rows3 } from 'lucide-react';
+import { BarChart3, Braces, Download, Eye, FileJson, FileText, LayoutGrid, Rows3 } from 'lucide-react';
 import {
   Menu,
   MenuContent,
@@ -8,7 +8,7 @@ import {
   MenuTrigger,
 } from '../components/ui/Menu';
 
-export type ResultsViewMode = 'table' | 'json' | 'visual';
+export type ResultsViewMode = 'table' | 'cards' | 'json' | 'visual';
 
 interface ResultsToolbarProps {
   stats: {
@@ -68,7 +68,7 @@ export function ResultsToolbar({
       </div>
       <div className="flex items-center gap-1.5">
         <Menu>
-          <MenuTrigger icon={Eye} active={view === 'table' || view === 'json'}>
+          <MenuTrigger icon={Eye} active={view === 'table' || view === 'cards' || view === 'json'}>
             View
           </MenuTrigger>
           <MenuContent minWidth={160}>
@@ -79,6 +79,13 @@ export function ResultsToolbar({
               onSelect={() => onViewChange('table')}
             >
               Table
+            </MenuItem>
+            <MenuItem
+              icon={LayoutGrid}
+              selected={view === 'cards'}
+              onSelect={() => onViewChange('cards')}
+            >
+              Cards
             </MenuItem>
             <MenuItem
               icon={Braces}

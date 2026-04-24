@@ -26,7 +26,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           variantClass[variant],
           size === 'sm' && 'px-2 py-1 text-xs',
-          size === 'icon' && 'h-7 w-7 p-0',
+          size === 'icon' && 'h-7 w-7 p-0 touch:min-h-[44px] touch:min-w-[44px]',
           loading && 'cursor-progress',
           className,
         )}

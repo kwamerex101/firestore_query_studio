@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, useEffect } from 'react';
-import { ChevronDown, Flame, HelpCircle, Save, Server, Terminal } from 'lucide-react';
+import { ChevronDown, Flame, HelpCircle, Moon, Save, Server, Sun, Terminal } from 'lucide-react';
 import { useAppState } from '../state/AppState';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -20,6 +20,13 @@ const SECTIONS: Array<{ id: SettingsSection; label: string; icon: React.ReactNod
 
 export function SettingsPage() {
   const [section, setSection] = useState<SettingsSection>('llm');
+  const { theme, setTheme } = useAppState();
+
+  const THEME_OPTIONS: Array<{ value: typeof theme; label: string; icon: React.ReactNode }> = [
+    { value: 'light', label: 'Light', icon: <Sun size={13} /> },
+    { value: 'dark', label: 'Dark', icon: <Moon size={13} /> },
+    { value: 'system', label: 'System', icon: <span className="text-[11px]">Auto</span> },
+  ];
 
   return (
     <div className="h-full overflow-auto p-6 animate-fade-in">
@@ -29,6 +36,33 @@ export function SettingsPage() {
           Configure how Firestore Query Studio plans queries. Pick the OpenAI-compatible HTTP
           endpoint, or the Cursor Agent CLI.
         </p>
+
+        {/* Theme picker */}
+        <div className="mb-5 flex items-center justify-between rounded-lg border border-border bg-card/60 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Appearance</p>
+            <p className="text-xs text-muted-foreground">Choose a color theme for the app.</p>
+          </div>
+          <div className="flex items-center rounded-md border border-border bg-secondary/50 p-0.5">
+            {THEME_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setTheme(opt.value)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-all duration-150',
+                  theme === opt.value
+                    ? 'bg-card text-foreground shadow-soft'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                aria-pressed={theme === opt.value}
+              >
+                {opt.icon}
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <SettingsSubNav active={section} onChange={setSection} />
 

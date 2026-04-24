@@ -305,6 +305,8 @@ export function ResultsTable({
             })}
           />
         </div>
+      ) : view === 'cards' ? (
+        <CardsView rows={rowModel.rows.map((r) => r.original)} />
       ) : view === 'table' ? (
         <div ref={scrollRef} className="flex-1 overflow-auto">
           <table className="w-full border-separate border-spacing-0 text-left text-xs">
@@ -389,6 +391,47 @@ export function ResultsTable({
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                     */
 /* ------------------------------------------------------------------ */
+
+const CARDS_MAX_ROWS = 500;
+function CardsView({ rows }: { rows: ResultRow[] }) {
+  const capped = rows.length > CARDS_MAX_ROWS ? rows.slice(0, CARDS_MAX_ROWS) : rows;
+  const truncated = rows.length > capped.length;
+  return (
+    <div className="flex-1 overflow-auto p-3">
+      {truncated && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Showing first {CARDS_MAX_ROWS} of {rows.length} rows. Use Download to get all.
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {capped.map((row) => (
+          <div
+            key={row.id}
+            className="rounded-lg border border-border bg-card px-4 py-3 text-xs shadow-soft"
+          >
+            <p className="mb-2 truncate font-mono text-[10px] text-muted-foreground">
+              {row.id}
+            </p>
+            <dl className="space-y-1">
+              {Object.entries(row.data).map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <dt className="w-1/3 shrink-0 truncate font-semibold text-muted-foreground">{k}</dt>
+                  <dd className="min-w-0 flex-1 truncate text-foreground">
+                    {v === null || v === undefined
+                      ? <span className="italic text-muted-foreground">null</span>
+                      : typeof v === 'object'
+                      ? <span className="font-mono">{JSON.stringify(v)}</span>
+                      : String(v)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
   if (sorted === 'asc') return <ArrowUp size={10} className="text-primary" />;

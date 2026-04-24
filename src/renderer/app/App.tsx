@@ -1,12 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Database, Settings, Search, History } from 'lucide-react';
 import { useAppState } from '../state/AppState';
-import { ProfilesPage } from './ProfilesPage';
 import { QueryPage } from './QueryPage';
-import { SettingsPage } from './SettingsPage';
-import { HistoryPage } from './HistoryPage';
+const ProfilesPage = lazy(() => import('./ProfilesPage').then((m) => ({ default: m.ProfilesPage })));
+const SettingsPage = lazy(() => import('./SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const HistoryPage = lazy(() => import('./HistoryPage').then((m) => ({ default: m.HistoryPage })));
 import { EnvBadge, EngineBadge } from '../components/ui/badge';
 import { WebAuthBanner } from '../components/WebAuthBanner';
+import { PwaInstallBanner } from '../components/PwaInstallBanner';
+import { OnboardingWizard } from './OnboardingWizard';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { cn } from '../lib/utils';
 
 type Tab = 'query' | 'history' | 'profiles' | 'settings';
@@ -64,8 +67,11 @@ export function App() {
         />
       </header>
 
+      <OnboardingWizard />
       <EnvStrip />
       <WebAuthBanner />
+      <OfflineBanner />
+      <PwaInstallBanner />
 
       <main className="relative flex-1 overflow-hidden">
         {/*
@@ -74,16 +80,22 @@ export function App() {
           survive tab switches. Only the active tab is visible.
         */}
         <TabPanel active={tab === 'query'}>
-          <QueryPage />
+          <QueryPage onSwitchToProfiles={() => setTab('profiles')} />
         </TabPanel>
         <TabPanel active={tab === 'history'}>
-          <HistoryPage onRequestSwitchToQuery={() => setTab('query')} />
+          <Suspense fallback={<TabLoader />}>
+            <HistoryPage onRequestSwitchToQuery={() => setTab('query')} />
+          </Suspense>
         </TabPanel>
         <TabPanel active={tab === 'profiles'}>
-          <ProfilesPage />
+          <Suspense fallback={<TabLoader />}>
+            <ProfilesPage />
+          </Suspense>
         </TabPanel>
         <TabPanel active={tab === 'settings'}>
-          <SettingsPage />
+          <Suspense fallback={<TabLoader />}>
+            <SettingsPage />
+          </Suspense>
         </TabPanel>
       </main>
 
@@ -126,6 +138,14 @@ export function App() {
   );
 }
 
+function TabLoader() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground animate-pulse">
+      Loading…
+    </div>
+  );
+}
+
 function TabPanel({ active, children }: { active: boolean; children: React.ReactNode }) {
   return (
     <div
@@ -135,6 +155,21 @@ function TabPanel({ active, children }: { active: boolean; children: React.React
       )}
     >
       {children}
+    </div>
+  );
+}
+
+function OfflineBanner() {
+  const { online } = useOnlineStatus();
+  if (online) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-2 border-b border-env-staging/40 bg-env-staging/10 px-4 py-1.5 text-xs text-env-staging animate-fade-in-down"
+    >
+      <span className="status-dot bg-env-staging" aria-hidden />
+      You are offline — queries require a network connection. History is still available.
     </div>
   );
 }
@@ -150,21 +185,25 @@ function EnvStrip() {
     );
   }
 
-  const tone =
-    activeProfile.envTag === 'prod'
-      ? 'border-env-prod/40 bg-env-prod/10 text-env-prod'
-      : activeProfile.envTag === 'staging'
-      ? 'border-env-staging/40 bg-env-staging/10 text-env-staging'
-      : 'border-env-dev/40 bg-env-dev/10 text-env-dev';
+  const isProd = activeProfile.envTag === 'prod';
+  const tone = isProd
+    ? 'border-env-prod/60 bg-env-prod/12 text-env-prod'
+    : activeProfile.envTag === 'staging'
+    ? 'border-env-staging/40 bg-env-staging/10 text-env-staging'
+    : 'border-env-dev/40 bg-env-dev/10 text-env-dev';
 
   return (
     <div
       key={activeProfile.id}
       className={cn(
         'flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-1.5 text-xs animate-fade-in-down sm:px-4',
+        isProd && 'border-b-2',
         tone,
       )}
     >
+      {isProd ? (
+        <span className="status-dot mr-0.5 bg-env-prod" aria-hidden />
+      ) : null}
       <EnvBadge envTag={activeProfile.envTag} />
       <EngineBadge engine={activeProfile.engine} />
       <span className="font-medium">{activeProfile.name}</span>

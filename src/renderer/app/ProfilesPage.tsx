@@ -38,10 +38,10 @@ import { useToast } from '../components/ui/toast';
 import { ServiceAccountPicker } from '../components/ServiceAccountPicker';
 import { FirebaseWebConfigDialog } from '../components/FirebaseWebConfigDialog';
 import { capabilities, ipc } from '../lib/ipcClient';
-import { explainSqlProbeError } from '@shared/probeErrorExplain';
+import { explainSqlProbeError, explainRunError } from '@shared/probeErrorExplain';
 import { cn } from '../lib/utils';
 
-type FormState = {
+export type FormState = {
   name: string;
   engine: Engine;
   envTag: EnvTag;
@@ -84,7 +84,7 @@ type FormState = {
   mssqlInstanceName: string;
 };
 
-const emptyForm: FormState = {
+export const emptyForm: FormState = {
   name: '',
   engine: 'firestore',
   envTag: 'dev',
@@ -114,7 +114,7 @@ const emptyForm: FormState = {
   mssqlInstanceName: '',
 };
 
-function defaultPortFor(engine: Engine): string {
+export function defaultPortFor(engine: Engine): string {
   switch (engine) {
     case 'postgres':
       return '5432';
@@ -125,6 +125,86 @@ function defaultPortFor(engine: Engine): string {
     default:
       return '8080';
   }
+}
+
+export function buildProfileInputFromForm(form: FormState): ProfileInput {
+  if (form.engine === 'postgres') {
+    const base = {
+      engine: 'postgres' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      host: form.sqlHost.trim() || '127.0.0.1',
+      port: Number(form.sqlPort) || 5432,
+      database: form.sqlDatabase.trim(),
+      user: form.sqlUser.trim(),
+      sslMode: form.sslMode,
+      schema: form.pgSchema.trim() || 'public',
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+    return form.sqlPassword.length > 0
+      ? { ...base, password: form.sqlPassword }
+      : base;
+  }
+  if (form.engine === 'mysql') {
+    const base = {
+      engine: 'mysql' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      host: form.sqlHost.trim() || '127.0.0.1',
+      port: Number(form.sqlPort) || 3306,
+      database: form.sqlDatabase.trim(),
+      user: form.sqlUser.trim(),
+      sslMode: form.sslMode,
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+    return form.sqlPassword.length > 0
+      ? { ...base, password: form.sqlPassword }
+      : base;
+  }
+  if (form.engine === 'mssql') {
+    const base = {
+      engine: 'mssql' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      host: form.sqlHost.trim() || '127.0.0.1',
+      port: Number(form.sqlPort) || 1433,
+      database: form.sqlDatabase.trim(),
+      user: form.sqlUser.trim(),
+      encrypt: form.mssqlEncrypt,
+      trustServerCertificate: form.mssqlTrustServerCertificate,
+      instanceName:
+        form.mssqlInstanceName.trim().length > 0
+          ? form.mssqlInstanceName.trim()
+          : undefined,
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+    return form.sqlPassword.length > 0
+      ? { ...base, password: form.sqlPassword }
+      : base;
+  }
+  const base = {
+    name: form.name.trim(),
+    envTag: form.envTag,
+    projectId: form.projectId.trim(),
+    scanCap: Number(form.scanCap),
+    sampleSize: Number(form.sampleSize),
+  };
+  if (form.kind === 'live') {
+    return {
+      kind: 'live' as const,
+      ...base,
+      serviceAccountPath: form.serviceAccountPath.trim(),
+    };
+  }
+  return {
+    kind: 'emulator' as const,
+    ...base,
+    host: form.host.trim() || '127.0.0.1',
+    port: Number(form.port) || 8080,
+  };
 }
 
 type TestState =
@@ -226,83 +306,7 @@ export function ProfilesPage() {
   }
 
   function buildProfileInput(): ProfileInput {
-    if (form.engine === 'postgres') {
-      const base = {
-        engine: 'postgres' as const,
-        name: form.name.trim(),
-        envTag: form.envTag,
-        host: form.sqlHost.trim() || '127.0.0.1',
-        port: Number(form.sqlPort) || 5432,
-        database: form.sqlDatabase.trim(),
-        user: form.sqlUser.trim(),
-        sslMode: form.sslMode,
-        schema: form.pgSchema.trim() || 'public',
-        queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
-        defaultLimit: Number(form.defaultLimit) || 500,
-      };
-      return form.sqlPassword.length > 0
-        ? { ...base, password: form.sqlPassword }
-        : base;
-    }
-    if (form.engine === 'mysql') {
-      const base = {
-        engine: 'mysql' as const,
-        name: form.name.trim(),
-        envTag: form.envTag,
-        host: form.sqlHost.trim() || '127.0.0.1',
-        port: Number(form.sqlPort) || 3306,
-        database: form.sqlDatabase.trim(),
-        user: form.sqlUser.trim(),
-        sslMode: form.sslMode,
-        queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
-        defaultLimit: Number(form.defaultLimit) || 500,
-      };
-      return form.sqlPassword.length > 0
-        ? { ...base, password: form.sqlPassword }
-        : base;
-    }
-    if (form.engine === 'mssql') {
-      const base = {
-        engine: 'mssql' as const,
-        name: form.name.trim(),
-        envTag: form.envTag,
-        host: form.sqlHost.trim() || '127.0.0.1',
-        port: Number(form.sqlPort) || 1433,
-        database: form.sqlDatabase.trim(),
-        user: form.sqlUser.trim(),
-        encrypt: form.mssqlEncrypt,
-        trustServerCertificate: form.mssqlTrustServerCertificate,
-        instanceName:
-          form.mssqlInstanceName.trim().length > 0
-            ? form.mssqlInstanceName.trim()
-            : undefined,
-        queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
-        defaultLimit: Number(form.defaultLimit) || 500,
-      };
-      return form.sqlPassword.length > 0
-        ? { ...base, password: form.sqlPassword }
-        : base;
-    }
-    const base = {
-      name: form.name.trim(),
-      envTag: form.envTag,
-      projectId: form.projectId.trim(),
-      scanCap: Number(form.scanCap),
-      sampleSize: Number(form.sampleSize),
-    };
-    if (form.kind === 'live') {
-      return {
-        kind: 'live' as const,
-        ...base,
-        serviceAccountPath: form.serviceAccountPath.trim(),
-      };
-    }
-    return {
-      kind: 'emulator' as const,
-      ...base,
-      host: form.host.trim() || '127.0.0.1',
-      port: Number(form.port) || 8080,
-    };
+    return buildProfileInputFromForm(form);
   }
 
   async function save() {
@@ -525,8 +529,20 @@ export function ProfilesPage() {
       </div>
 
       {profiles.length === 0 ? (
-        <div className="card text-center text-sm text-muted-foreground animate-fade-in-up">
-          No profiles yet. Add a Firestore project or a SQL server to get started.
+        <div className="card flex flex-col items-center gap-4 py-10 text-center text-sm text-muted-foreground animate-fade-in-up">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-secondary/60 text-primary">
+            <Link2 size={22} />
+          </div>
+          <div>
+            <p className="font-medium text-foreground">No connections yet</p>
+            <p className="mt-1 text-xs leading-relaxed max-w-xs">
+              Add a Firestore project or a SQL database to get started. You only need to do this once.
+            </p>
+          </div>
+          <Button variant="primary" onClick={openNew}>
+            <Plus size={14} />
+            Connect your first database
+          </Button>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -618,11 +634,19 @@ export function ProfilesPage() {
                 </Button>
               </div>
             </div>
-            <TestConnectionResultCard test={test} />
+            <TestConnectionResultCard test={test} engine={form.engine} />
           </div>
         }
       >
         <div className="grid gap-3">
+          {!editing && (
+            <QuickConnectInput
+              onParsed={(overrides) =>
+                setForm((f) => ({ ...f, ...overrides }))
+              }
+              disabled={busy}
+            />
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="label">Engine</label>
@@ -1218,8 +1242,9 @@ function TestConnectionControl({
  * Full-width card under the footer action row. Shows in-progress, success, or
  * error results so long messages (e.g. server version) are not squeezed inline.
  */
-function TestConnectionResultCard({ test }: { test: TestState }) {
+function TestConnectionResultCard({ test, engine }: { test: TestState; engine: Engine }) {
   const toast = useToast();
+  const [showTechnical, setShowTechnical] = useState(false);
 
   async function copyError() {
     if (test.status !== 'err') return;
@@ -1266,6 +1291,12 @@ function TestConnectionResultCard({ test }: { test: TestState }) {
     );
   }
   if (test.status !== 'err') return null;
+
+  const explanation =
+    engine === 'firestore'
+      ? explainRunError(test.code, test.message)
+      : null;
+
   return (
     <div
       role="alert"
@@ -1274,21 +1305,59 @@ function TestConnectionResultCard({ test }: { test: TestState }) {
       <div className="flex w-full min-w-0 items-start gap-2 px-3 py-2.5">
         <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-env-prod" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-env-prod">Connection failed</p>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-env-prod/95">
-            <span className="font-mono text-[11px] text-env-prod">Code {test.code}</span>
-            <button
-              type="button"
-              onClick={copyError}
-              className="inline-flex items-center gap-0.5 rounded text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Copy size={12} aria-hidden />
-              Copy error
-            </button>
-          </div>
-          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-foreground/90 [overflow-wrap:anywhere]">
-            {test.message}
-          </pre>
+          {explanation ? (
+            <>
+              <p className="font-medium text-env-prod">{explanation.title}</p>
+              <p className="mt-1 text-xs text-foreground/80 leading-relaxed">{explanation.body}</p>
+              {explanation.hint ? (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  <span className="font-medium">Tip: </span>{explanation.hint}
+                </p>
+              ) : null}
+              {explanation.showTechnical ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTechnical((v) => !v)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+                  >
+                    {showTechnical ? 'Hide technical details' : 'Show technical details'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyError}
+                    className="inline-flex items-center gap-0.5 rounded text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Copy size={11} aria-hidden />
+                    Copy
+                  </button>
+                </div>
+              ) : null}
+              {showTechnical ? (
+                <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-foreground/80 rounded border border-border bg-secondary/50 p-2 [overflow-wrap:anywhere]">
+                  {explanation.technical}
+                </pre>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-env-prod">Connection failed</p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-env-prod/95">
+                <span className="font-mono text-[11px] text-env-prod">Code {test.code}</span>
+                <button
+                  type="button"
+                  onClick={copyError}
+                  className="inline-flex items-center gap-0.5 rounded text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Copy size={12} aria-hidden />
+                  Copy error
+                </button>
+              </div>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-foreground/90 [overflow-wrap:anywhere]">
+                {test.message}
+              </pre>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1670,6 +1739,101 @@ function ProbeActionButtons({
           <Pencil size={12} />
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Parses a connection string (postgres://, mysql://, mssql://) into FormState
+ * partial overrides. Returns null when the string can't be parsed.
+ */
+export function parseConnectionString(
+  raw: string,
+  current: FormState,
+): Partial<FormState> | null {
+  try {
+    const url = new URL(raw.trim());
+    const protocol = url.protocol.replace(':', '').toLowerCase();
+    const engineMap: Record<string, Engine> = {
+      postgres: 'postgres',
+      postgresql: 'postgres',
+      mysql: 'mysql',
+      mariadb: 'mysql',
+      mssql: 'mssql',
+      sqlserver: 'mssql',
+      'mssql+pyodbc': 'mssql',
+    };
+    const engine = engineMap[protocol];
+    if (!engine) return null;
+
+    const host = url.hostname || '127.0.0.1';
+    const port = url.port || defaultPortFor(engine);
+    const database = url.pathname.replace(/^\//, '').split('?')[0];
+    const user = url.username ? decodeURIComponent(url.username) : '';
+    const password = url.password ? decodeURIComponent(url.password) : '';
+
+    return {
+      engine,
+      sqlHost: host,
+      sqlPort: port,
+      sqlDatabase: database,
+      sqlUser: user,
+      sqlPassword: password,
+      sqlPasswordTouched: password.length > 0,
+      pgSchema:
+        engine === 'postgres'
+          ? (url.searchParams.get('schema') ?? current.pgSchema)
+          : current.pgSchema,
+      sslMode:
+        (url.searchParams.get('sslmode') as FormState['sslMode']) ?? current.sslMode,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function QuickConnectInput({
+  onParsed,
+  disabled,
+}: {
+  onParsed: (overrides: Partial<FormState>) => void;
+  disabled: boolean;
+}) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+
+  function handleChange(raw: string) {
+    setValue(raw);
+    setError('');
+    if (!raw.trim()) return;
+    const result = parseConnectionString(raw, emptyForm);
+    if (result) {
+      onParsed(result);
+      setError('');
+    } else if (raw.includes('://')) {
+      setError('Could not parse. Supported: postgres://, mysql://, mssql://');
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-dashed border-border bg-secondary/30 p-3">
+      <label className="label mb-1 flex items-center gap-1.5">
+        <Link2 size={12} className="text-muted-foreground" />
+        Quick Connect — paste a connection string
+      </label>
+      <Input
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder="postgres://user:pass@host:5432/mydb"
+        disabled={disabled}
+        className="font-mono text-xs"
+      />
+      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+      {!error && value && (
+        <p className="mt-1 text-[11px] text-green-600 dark:text-green-400">
+          Parsed — fields below have been filled in.
+        </p>
+      )}
     </div>
   );
 }

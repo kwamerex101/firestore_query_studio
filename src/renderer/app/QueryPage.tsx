@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Play,
   Wand2,
   ExternalLink,
   RefreshCw,
   FileText,
+  Share2,
   Sparkles,
   History as HistoryIcon,
 } from 'lucide-react';
@@ -19,12 +20,15 @@ import { Button } from '../components/ui/button';
 import { Input, Textarea } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { useToast } from '../components/ui/toast';
+import { Dialog } from '../components/ui/dialog';
 import { ResultsTable } from './ResultsTable';
-import { ExplainPanel } from './ExplainPanel';
-import { SchemaEditor } from './SchemaEditor';
-import { InsightsPanel } from './InsightsPanel';
-import { SqlQueryPanel } from './SqlQueryPanel';
+const ExplainPanel = lazy(() => import('./ExplainPanel').then((m) => ({ default: m.ExplainPanel })));
+const SchemaEditor = lazy(() => import('./SchemaEditor').then((m) => ({ default: m.SchemaEditor })));
+const InsightsPanel = lazy(() => import('./InsightsPanel').then((m) => ({ default: m.InsightsPanel })));
+const SqlQueryPanel = lazy(() => import('./SqlQueryPanel').then((m) => ({ default: m.SqlQueryPanel })));
 import { isSqlProfile } from '@shared/types/profile';
+import { explainRunError } from '@shared/probeErrorExplain';
+import { encodeShareUrl, decodeShareUrl } from '../lib/shareUrl';
 import { cn } from '../lib/utils';
 
 type RightTab = 'explain' | 'insights' | 'schema';
@@ -47,7 +51,13 @@ function formatRelativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-export function QueryPage() {
+const EXAMPLE_QUESTIONS = [
+  'Find users with email ending in @example.com',
+  'Show orders placed in the last 7 days',
+  'Which products have stock less than 10?',
+];
+
+export function QueryPage({ onSwitchToProfiles }: { onSwitchToProfiles?: () => void }) {
   const { activeProfile, llm, pendingHistory, clearPendingHistory, notifyHistoryChanged } =
     useAppState();
   const toast = useToast();
@@ -61,6 +71,8 @@ export function QueryPage() {
   const [running, setRunning] = useState(false);
   const [autoRun, setAutoRun] = useState(true);
   const [rightTab, setRightTab] = useState<RightTab>('explain');
+  const [showProdWarning, setShowProdWarning] = useState(false);
+  const prodConfirmedRef = useRef(false);
   /**
    * Snapshot of (question, collection) at the time the CURRENT plan was
    * built. When the live inputs drift from this, the plan is "stale" —
@@ -76,6 +88,8 @@ export function QueryPage() {
    * When present, we offer "Reuse previous answer" to skip the LLM + Firestore.
    */
   const [cachedEntry, setCachedEntry] = useState<HistoryEntry | null>(null);
+  const [cacheAutoUsed, setCacheAutoUsed] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const reloadCollections = useCallback(async () => {
     if (!activeProfile) return;
@@ -110,10 +124,30 @@ export function QueryPage() {
     void ipc.schema.get({ collection, collectionGroup: false }).then(setSchema);
   }, [activeProfile, collection]);
 
-  async function buildPlan() {
+  const CACHE_TTL_MS = 5 * 60 * 1_000;
+
+  async function buildPlan(forceRefresh = false) {
     if (!activeProfile) return toast.push('Select a profile first.', 'error');
     if (!llm?.hasApiKey) return toast.push('Configure LLM API key in Settings.', 'error');
     if (!question.trim()) return toast.push('Type a question first.', 'error');
+    if (activeProfile.envTag === 'prod' && !prodConfirmedRef.current) {
+      setShowProdWarning(true);
+      return;
+    }
+
+    // Auto-reuse a fresh cache hit (< 5 min old) without hitting the LLM.
+    if (
+      !forceRefresh &&
+      cachedEntry !== null &&
+      isFirestoreHistoryEntry(cachedEntry) &&
+      Date.now() - cachedEntry.createdAt < CACHE_TTL_MS
+    ) {
+      reuseCachedEntry(cachedEntry);
+      setCacheAutoUsed(true);
+      return;
+    }
+
+    setCacheAutoUsed(false);
     const questionAtBuild = question.trim();
     const collectionAtBuild = normalizeCollection(collection);
     setBuilding(true);
@@ -212,11 +246,13 @@ export function QueryPage() {
   useEffect(() => {
     if (!activeProfile) {
       setCachedEntry(null);
+      setCacheAutoUsed(false);
       return;
     }
     const q = question.trim();
     if (!q) {
       setCachedEntry(null);
+      setCacheAutoUsed(false);
       return;
     }
     let cancelled = false;
@@ -256,6 +292,26 @@ export function QueryPage() {
     clearPendingHistory();
   }, [pendingHistory, clearPendingHistory]);
 
+  // Parse ?q=...&c=... on first mount to pre-fill from a share link.
+  useEffect(() => {
+    if (!window.location.search) return;
+    const parsed = decodeShareUrl(window.location.search);
+    if (!parsed) return;
+    setQuestion(parsed.question);
+    if (parsed.collection) setCollection(parsed.collection);
+    // Remove the params so refreshing doesn't keep re-applying them.
+    const clean = window.location.pathname;
+    window.history.replaceState(null, '', clean);
+  }, []);
+
+  function shareQuery() {
+    if (!question.trim()) return;
+    const url = encodeShareUrl({ question: question.trim(), collection: collection || undefined });
+    void navigator.clipboard.writeText(url);
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2000);
+  }
+
   function reuseCachedEntry(entry: HistoryEntry) {
     if (!isFirestoreHistoryEntry(entry)) return;
     setPlan(entry.plan);
@@ -291,17 +347,29 @@ export function QueryPage() {
   if (!activeProfile) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground animate-fade-in">
-        <div className="flex flex-col items-center gap-3">
-          <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/60 text-primary">
-            <FileText size={22} />
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-xl bg-secondary/60 text-primary">
+            <FileText size={24} />
             <span
               aria-hidden
               className="absolute inset-0 rounded-xl ring-2 ring-primary/40 animate-ping-soft"
             />
           </div>
-          <div className="text-balance">
-            Pick or create a profile from the <b>Profiles</b> tab to start querying.
+          <div className="max-w-xs">
+            <p className="font-medium text-foreground">No database connected</p>
+            <p className="mt-1 text-xs leading-relaxed">
+              Connect to Firestore or a SQL database to start asking questions in plain English.
+            </p>
           </div>
+          {onSwitchToProfiles ? (
+            <button
+              type="button"
+              onClick={onSwitchToProfiles}
+              className="rounded-md border border-primary/60 bg-primary/15 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/25 hover:-translate-y-px"
+            >
+              Connect a database →
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -309,10 +377,12 @@ export function QueryPage() {
 
   if (isSqlProfile(activeProfile)) {
     return (
-      <SqlQueryPanel
-        profile={activeProfile}
-        hasLlmConfigured={!!llm?.hasApiKey}
-      />
+      <Suspense fallback={<PanelLoader />}>
+        <SqlQueryPanel
+          profile={activeProfile}
+          hasLlmConfigured={!!llm?.hasApiKey}
+        />
+      </Suspense>
     );
   }
 
@@ -320,6 +390,35 @@ export function QueryPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-auto lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden">
+      {showProdWarning ? (
+        <Dialog
+          open
+          onClose={() => setShowProdWarning(false)}
+          title="Querying production data"
+          description="This profile is tagged as production. All reads are read-only, but they count against your Firestore billing quota."
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setShowProdWarning(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  prodConfirmedRef.current = true;
+                  setShowProdWarning(false);
+                  void buildPlan(true);
+                }}
+              >
+                Continue
+              </Button>
+            </div>
+          }
+        >
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to run this query against <strong className="text-foreground">production</strong>?
+          </p>
+        </Dialog>
+      ) : null}
       <div className="flex min-h-0 min-w-0 flex-col lg:border-r lg:border-border">
         <div
           className={cn(
@@ -380,7 +479,7 @@ export function QueryPage() {
             <div className="flex flex-col gap-1 pt-4">
               <Button
                 variant="primary"
-                onClick={buildPlan}
+                onClick={() => void buildPlan()}
                 disabled={busy}
                 loading={building}
                 title={autoRun ? 'Build plan and run (⌘↵)' : 'Build plan (⌘↵)'}
@@ -388,6 +487,15 @@ export function QueryPage() {
                 {!building ? <Wand2 size={14} /> : null}
                 {building ? 'Building…' : autoRun ? 'Ask' : 'Build plan'}
               </Button>
+              {cacheAutoUsed && (
+                <button
+                  type="button"
+                  onClick={() => void buildPlan(true)}
+                  className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Showing cached result — Refresh
+                </button>
+              )}
               <Button
                 onClick={() => plan && runPlan(plan)}
                 disabled={!plan || busy || isStale}
@@ -401,6 +509,20 @@ export function QueryPage() {
                 {!running ? <Play size={14} /> : null}
                 {running ? 'Running…' : isStale ? 'Run (stale)' : 'Run'}
               </Button>
+              {question.trim() && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={shareQuery}
+                  title="Copy share link to clipboard"
+                >
+                  {shareCopied ? (
+                    <span className="text-green-600 dark:text-green-400">Copied!</span>
+                  ) : (
+                    <><Share2 size={13} /> Share</>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
           {isStale ? (
@@ -445,7 +567,7 @@ export function QueryPage() {
 
         <div className="min-h-[240px] flex-1 lg:min-h-0">
           {outcome === null ? (
-            <EmptyResults plan={plan} />
+            <EmptyResults plan={plan} onSelectExample={setQuestion} />
           ) : outcome.ok ? (
             <ResultsTable
               rows={outcome.rows}
@@ -477,37 +599,47 @@ export function QueryPage() {
       <div className="flex min-h-0 flex-col border-t border-border lg:border-t-0">
         <RightTabs active={rightTab} onChange={setRightTab} />
         <div className="min-h-[320px] flex-1 lg:min-h-0">
-          {rightTab === 'explain' ? (
-            <div key="explain" className="h-full animate-fade-in">
-              {plan ? (
-                <ExplainPanel plan={plan} />
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-muted-foreground">
-                    <Wand2 size={20} />
+          <Suspense fallback={<PanelLoader />}>
+            {rightTab === 'explain' ? (
+              <div key="explain" className="h-full animate-fade-in">
+                {plan ? (
+                  <ExplainPanel plan={plan} />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-muted-foreground">
+                      <Wand2 size={20} />
+                    </div>
+                    <p className="max-w-xs text-sm text-muted-foreground">
+                      Build a plan to see its explanation, pseudo-code, and JSON here.
+                    </p>
                   </div>
-                  <p className="max-w-xs text-sm text-muted-foreground">
-                    Build a plan to see its explanation, pseudo-code, and JSON here.
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : rightTab === 'insights' ? (
-            <div key="insights" className="h-full animate-fade-in">
-              <InsightsPanel
-                question={trimmedQ}
-                collection={currentCollection}
-                plan={plan}
-                outcome={outcome}
-              />
-            </div>
-          ) : (
-            <div key="schema" className="h-full animate-fade-in">
-              <SchemaEditor collection={collection} schema={schema} onRefreshed={setSchema} />
-            </div>
-          )}
+                )}
+              </div>
+            ) : rightTab === 'insights' ? (
+              <div key="insights" className="h-full animate-fade-in">
+                <InsightsPanel
+                  question={trimmedQ}
+                  collection={currentCollection}
+                  plan={plan}
+                  outcome={outcome}
+                />
+              </div>
+            ) : (
+              <div key="schema" className="h-full animate-fade-in">
+                <SchemaEditor collection={collection} schema={schema} onRefreshed={setSchema} />
+              </div>
+            )}
+          </Suspense>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PanelLoader() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-muted-foreground animate-pulse">
+      Loading…
     </div>
   );
 }
@@ -521,23 +653,51 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function EmptyResults({ plan }: { plan: QueryPlan | null }) {
-  return (
-    <div className="flex h-full items-center justify-center text-sm text-muted-foreground animate-fade-in">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary/60 text-primary">
-          {plan ? <Play size={16} /> : <Sparkles size={16} />}
-        </div>
-        <div>
-          {plan
-            ? 'Plan ready — press Run to execute.'
-            : 'Build a plan from your question to see results here.'}
-        </div>
-        {!plan ? (
-          <div className="text-[11px] text-muted-foreground/70">
-            Tip: press <kbd className="rounded bg-secondary px-1 py-0.5 font-mono">⌘ ↵</kbd> to build.
+function EmptyResults({
+  plan,
+  onSelectExample,
+}: {
+  plan: QueryPlan | null;
+  onSelectExample: (q: string) => void;
+}) {
+  if (plan) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground animate-fade-in">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary/60 text-primary">
+            <Play size={16} />
           </div>
-        ) : null}
+          <div>Plan ready — press Run to execute.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-sm text-muted-foreground animate-fade-in">
+      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-secondary/60 text-primary">
+        <Sparkles size={18} />
+      </div>
+      <div className="text-center">
+        <p className="font-medium text-foreground/80">Ask a question in plain English</p>
+        <p className="mt-1 text-xs leading-relaxed">
+          The AI will figure out the query for you. Try one of these:
+        </p>
+      </div>
+      <div className="flex flex-col gap-2 w-full max-w-sm">
+        {EXAMPLE_QUESTIONS.map((q) => (
+          <button
+            key={q}
+            type="button"
+            onClick={() => onSelectExample(q)}
+            className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-left text-xs text-foreground/80 transition-all hover:border-primary/40 hover:bg-primary/8 hover:text-foreground hover:-translate-y-px"
+          >
+            {q}
+          </button>
+        ))}
+      </div>
+      <div className="text-[11px] text-muted-foreground/60">
+        Or press <kbd className="rounded bg-secondary px-1 py-0.5 font-mono">⌘ ↵</kbd> after typing your question.
       </div>
     </div>
   );
@@ -586,12 +746,36 @@ function RightTabs({ active, onChange }: { active: RightTab; onChange: (t: Right
 }
 
 function ErrorView({ outcome }: { outcome: Extract<RunOutcome, { ok: false }> }) {
+  const [showTechnical, setShowTechnical] = useState(false);
+  const explanation = explainRunError(outcome.code, outcome.message);
+
   return (
     <div className="p-4 animate-fade-in">
-      <div className="mb-2 text-sm font-semibold text-destructive">Run failed: {outcome.code}</div>
-      <pre className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
-        {outcome.message}
-      </pre>
+      <div className="rounded-md border border-destructive/30 bg-destructive/8 overflow-hidden">
+        <div className="px-4 py-3">
+          <p className="font-semibold text-sm text-destructive">{explanation.title}</p>
+          <p className="mt-1 text-sm text-foreground/80 leading-relaxed">{explanation.body}</p>
+          {explanation.hint ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <span className="font-medium">Tip: </span>{explanation.hint}
+            </p>
+          ) : null}
+          {explanation.showTechnical ? (
+            <button
+              type="button"
+              onClick={() => setShowTechnical((v) => !v)}
+              className="mt-2 text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+            >
+              {showTechnical ? 'Hide technical details' : 'Show technical details'}
+            </button>
+          ) : null}
+          {showTechnical ? (
+            <pre className="mt-2 whitespace-pre-wrap rounded border border-border bg-secondary/50 p-2 text-[11px] font-mono text-foreground/80 [overflow-wrap:anywhere]">
+              {explanation.technical}
+            </pre>
+          ) : null}
+        </div>
+      </div>
       {outcome.indexHint?.url ? (
         <div className="mt-3">
           <a
