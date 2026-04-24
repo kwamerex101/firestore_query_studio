@@ -1,4 +1,4 @@
-import { BarChart3, Braces, Download, Eye, FileJson, FileText, Rows3 } from 'lucide-react';
+import { BarChart3, Braces, Download, Eye, FileJson, FileSpreadsheet, FileText, LayoutGrid, Rows3 } from 'lucide-react';
 import {
   Menu,
   MenuContent,
@@ -8,7 +8,7 @@ import {
   MenuTrigger,
 } from '../components/ui/Menu';
 
-export type ResultsViewMode = 'table' | 'json' | 'visual';
+export type ResultsViewMode = 'table' | 'cards' | 'json' | 'visual';
 
 interface ResultsToolbarProps {
   stats: {
@@ -21,6 +21,8 @@ interface ResultsToolbarProps {
   onViewChange: (next: ResultsViewMode) => void;
   onDownloadJson?: () => void;
   onDownloadCsv?: () => void;
+  /** Copy TSV + open Google Sheets paste target in the browser. */
+  onCopyForSheets?: () => void;
   /** When false, the Visual menu is disabled (e.g. no rows). */
   canVisualize?: boolean;
   visualizeHint?: string;
@@ -40,6 +42,7 @@ export function ResultsToolbar({
   onViewChange,
   onDownloadJson,
   onDownloadCsv,
+  onCopyForSheets,
   canVisualize = true,
   visualizeHint,
 }: ResultsToolbarProps) {
@@ -68,7 +71,7 @@ export function ResultsToolbar({
       </div>
       <div className="flex items-center gap-1.5">
         <Menu>
-          <MenuTrigger icon={Eye} active={view === 'table' || view === 'json'}>
+          <MenuTrigger icon={Eye} active={view === 'table' || view === 'cards' || view === 'json'}>
             View
           </MenuTrigger>
           <MenuContent minWidth={160}>
@@ -79,6 +82,13 @@ export function ResultsToolbar({
               onSelect={() => onViewChange('table')}
             >
               Table
+            </MenuItem>
+            <MenuItem
+              icon={LayoutGrid}
+              selected={view === 'cards'}
+              onSelect={() => onViewChange('cards')}
+            >
+              Cards
             </MenuItem>
             <MenuItem
               icon={Braces}
@@ -135,6 +145,15 @@ export function ResultsToolbar({
               onSelect={() => onDownloadCsv?.()}
             >
               CSV
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem
+              icon={FileSpreadsheet}
+              disabled={!onCopyForSheets}
+              description="Copy as TSV + open a new Google Sheet"
+              onSelect={() => onCopyForSheets?.()}
+            >
+              Google Sheets
             </MenuItem>
           </MenuContent>
         </Menu>

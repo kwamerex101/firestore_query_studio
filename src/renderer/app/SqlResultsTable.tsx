@@ -10,8 +10,9 @@ import { Check, Copy } from 'lucide-react';
 import type { SqlColumn, SqlRow } from '@shared/types/ipc';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
-import { formatCellText, sqlRowsToCsv } from '@shared/csv';
+import { formatCellText, sqlRowsToCsv, sqlRowsToTsv } from '@shared/csv';
 import { downloadText } from '../lib/download';
+import { copyTsvAndOpenSheets } from '../lib/sheetsExport';
 import { ResultsToolbar, type ResultsViewMode } from './ResultsToolbar';
 import { VisualView } from './VisualView';
 
@@ -45,6 +46,7 @@ export function SqlResultsTable({
   elapsedMs,
 }: SqlResultsTableProps) {
   const [view, setView] = useState<ResultsViewMode>('table');
+  const toast = useToast();
 
   const canVisualize = rows.length > 0 && !!sql;
   const visualCacheKey = useMemo(() => {
@@ -65,6 +67,9 @@ export function SqlResultsTable({
       'text/csv',
     );
   }
+  async function copyForSheets() {
+    await copyTsvAndOpenSheets(sqlRowsToTsv(rows, columns), toast);
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -84,6 +89,7 @@ export function SqlResultsTable({
         onViewChange={setView}
         onDownloadJson={exportJson}
         onDownloadCsv={exportCsv}
+        onCopyForSheets={rows.length > 0 ? copyForSheets : undefined}
         canVisualize={canVisualize}
         visualizeHint={
           canVisualize
@@ -118,6 +124,8 @@ export function SqlResultsTable({
             })}
           />
         </div>
+      ) : view === 'cards' ? (
+        <SqlCardsView columns={columns} rows={rows} />
       ) : view === 'json' ? (
         <JsonView rows={rows} />
       ) : (
@@ -296,6 +304,51 @@ function SqlCell({ value }: { value: unknown }) {
     >
       {text}
     </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Cards view                                                         */
+/* ------------------------------------------------------------------ */
+
+const CARDS_MAX_ROWS = 500;
+function SqlCardsView({ columns, rows }: { columns: SqlColumn[]; rows: SqlRow[] }) {
+  const capped = rows.length > CARDS_MAX_ROWS ? rows.slice(0, CARDS_MAX_ROWS) : rows;
+  const truncated = rows.length > capped.length;
+  return (
+    <div className="flex-1 overflow-auto p-3">
+      {truncated && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Showing first {CARDS_MAX_ROWS} of {rows.length} rows. Use Download to get all.
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {capped.map((row, i) => (
+          <div
+            key={i}
+            className="rounded-lg border border-border bg-card px-4 py-3 text-xs shadow-soft"
+          >
+            <dl className="space-y-1">
+              {columns.map((col) => {
+                const v = getSqlCellValue(row, col.name);
+                return (
+                  <div key={col.name} className="flex gap-2">
+                    <dt className="w-1/3 shrink-0 truncate font-semibold text-muted-foreground">{col.name}</dt>
+                    <dd className="min-w-0 flex-1 truncate text-foreground">
+                      {v === null || v === undefined
+                        ? <span className="italic text-muted-foreground">null</span>
+                        : typeof v === 'object'
+                        ? <span className="font-mono">{JSON.stringify(v)}</span>
+                        : String(v)}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

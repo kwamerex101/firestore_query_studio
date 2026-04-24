@@ -1,25 +1,36 @@
 import { useLayoutEffect, useRef, useState, useEffect } from 'react';
-import { ChevronDown, Flame, HelpCircle, Save, Server, Terminal } from 'lucide-react';
+import { ChevronDown, Flame, HelpCircle, MessageSquare, Moon, Save, Server, Sparkles, Sun, Terminal } from 'lucide-react';
 import { useAppState } from '../state/AppState';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { getSlackSettings, setSlackSettings } from '../lib/slackNotify';
 import { useToast } from '../components/ui/toast';
 import { ipc } from '../lib/ipcClient';
 import { cn } from '../lib/utils';
 import { CursorSettingsSection } from './CursorPage';
+import { ClaudeSettingsSection } from './ClaudePage';
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
 
-type SettingsSection = 'llm' | 'cursor' | 'faq';
+type SettingsSection = 'llm' | 'cursor' | 'claude' | 'slack' | 'faq';
 
 const SECTIONS: Array<{ id: SettingsSection; label: string; icon: React.ReactNode }> = [
   { id: 'llm', label: 'LLM', icon: <Server size={14} /> },
   { id: 'cursor', label: 'Cursor CLI', icon: <Terminal size={14} /> },
+  { id: 'claude', label: 'Claude CLI', icon: <Sparkles size={14} /> },
+  { id: 'slack', label: 'Slack', icon: <MessageSquare size={14} /> },
   { id: 'faq', label: 'FAQ', icon: <HelpCircle size={14} /> },
 ];
 
 export function SettingsPage() {
   const [section, setSection] = useState<SettingsSection>('llm');
+  const { theme, setTheme } = useAppState();
+
+  const THEME_OPTIONS: Array<{ value: typeof theme; label: string; icon: React.ReactNode }> = [
+    { value: 'light', label: 'Light', icon: <Sun size={13} /> },
+    { value: 'dark', label: 'Dark', icon: <Moon size={13} /> },
+    { value: 'system', label: 'System', icon: <span className="text-[11px]">Auto</span> },
+  ];
 
   return (
     <div className="h-full overflow-auto p-6 animate-fade-in">
@@ -30,6 +41,33 @@ export function SettingsPage() {
           endpoint, or the Cursor Agent CLI.
         </p>
 
+        {/* Theme picker */}
+        <div className="mb-5 flex items-center justify-between rounded-lg border border-border bg-card/60 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Appearance</p>
+            <p className="text-xs text-muted-foreground">Choose a color theme for the app.</p>
+          </div>
+          <div className="flex items-center rounded-md border border-border bg-secondary/50 p-0.5">
+            {THEME_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setTheme(opt.value)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-all duration-150',
+                  theme === opt.value
+                    ? 'bg-card text-foreground shadow-soft'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                aria-pressed={theme === opt.value}
+              >
+                {opt.icon}
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <SettingsSubNav active={section} onChange={setSection} />
 
         <div className="mt-5">
@@ -37,6 +75,10 @@ export function SettingsPage() {
             <LlmSettingsSection />
           ) : section === 'cursor' ? (
             <CursorSettingsSection />
+          ) : section === 'claude' ? (
+            <ClaudeSettingsSection />
+          ) : section === 'slack' ? (
+            <SlackSettingsSection />
           ) : (
             <FaqSection />
           )}
@@ -404,6 +446,88 @@ function FaqSection() {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function SlackSettingsSection() {
+  const initial = getSlackSettings();
+  const [webhookUrl, setWebhookUrl] = useState(initial.webhookUrl);
+  const [thresholdSeconds, setThresholdSeconds] = useState(
+    String(Math.round(initial.thresholdMs / 1000)),
+  );
+  const [saved, setSaved] = useState(false);
+
+  function save() {
+    const ms = Math.max(1, Number(thresholdSeconds) || 10) * 1000;
+    setSlackSettings({ webhookUrl: webhookUrl.trim(), thresholdMs: ms });
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 1500);
+  }
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-border bg-card p-4 animate-fade-in">
+      <div>
+        <h2 className="text-sm font-semibold tracking-tight">Slack notifications</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Post a message to a Slack Incoming Webhook when a query takes longer than
+          your threshold. Useful for long-running exports you walk away from.
+        </p>
+      </div>
+
+      <div>
+        <label className="label">Webhook URL</label>
+        <Input
+          value={webhookUrl}
+          onChange={(e) => setWebhookUrl(e.target.value)}
+          placeholder="https://hooks.slack.com/services/T.../B.../..."
+          type="password"
+          spellCheck={false}
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Create one at{' '}
+          <a
+            href="https://api.slack.com/messaging/webhooks"
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            api.slack.com/messaging/webhooks
+          </a>
+          . Stored in this browser's localStorage — not synced to the desktop keychain.
+        </p>
+      </div>
+
+      <div>
+        <label className="label">Notify when a query takes longer than</label>
+        <div className="flex items-center gap-2">
+          <Input
+            value={thresholdSeconds}
+            onChange={(e) => setThresholdSeconds(e.target.value.replace(/[^\d]/g, ''))}
+            inputMode="numeric"
+            className="max-w-[100px]"
+          />
+          <span className="text-xs text-muted-foreground">seconds</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 pt-1">
+        <Button variant="primary" onClick={save}>
+          <Save size={14} />
+          {saved ? 'Saved!' : 'Save'}
+        </Button>
+        {webhookUrl && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setWebhookUrl('');
+              setSlackSettings({ webhookUrl: '', thresholdMs: Number(thresholdSeconds) * 1000 });
+            }}
+          >
+            Clear webhook
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import {
   LlmSettings,
   LlmProvider,
   CursorSettings,
+  ClaudeSettings,
   SslMode,
 } from './profile';
 import { CollectionSchema } from './schema';
@@ -33,6 +34,10 @@ export const IpcChannels = {
   cursorSet: 'cursor.set',
   cursorListModels: 'cursor.listModels',
   cursorTest: 'cursor.test',
+  claudeGet: 'claude.get',
+  claudeSet: 'claude.set',
+  claudeListModels: 'claude.listModels',
+  claudeTest: 'claude.test',
   providerGet: 'provider.get',
   providerSet: 'provider.set',
   schemaSample: 'schema.sample',
@@ -256,6 +261,37 @@ export const CursorTestErr = z.object({
 });
 export const CursorTestOutcome = z.discriminatedUnion('ok', [CursorTestOk, CursorTestErr]);
 export type CursorTestOutcome = z.infer<typeof CursorTestOutcome>;
+
+export const ClaudeGetResult = ClaudeSettings.partial().extend({
+  isConfigured: z.boolean(),
+});
+export type ClaudeGetResult = z.infer<typeof ClaudeGetResult>;
+
+export const ClaudeModelItem = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+});
+export type ClaudeModelItem = z.infer<typeof ClaudeModelItem>;
+
+export const ClaudeListModelsResult = z.object({
+  models: z.array(ClaudeModelItem),
+  source: z.enum(['cli', 'fallback']),
+  error: z.string().optional(),
+});
+export type ClaudeListModelsResult = z.infer<typeof ClaudeListModelsResult>;
+
+export const ClaudeTestOk = z.object({
+  ok: z.literal(true),
+  version: z.string().optional(),
+  stdout: z.string().optional(),
+});
+export const ClaudeTestErr = z.object({
+  ok: z.literal(false),
+  code: z.string(),
+  message: z.string(),
+});
+export const ClaudeTestOutcome = z.discriminatedUnion('ok', [ClaudeTestOk, ClaudeTestErr]);
+export type ClaudeTestOutcome = z.infer<typeof ClaudeTestOutcome>;
 
 export const ProviderResult = z.object({
   provider: LlmProvider,
@@ -770,6 +806,7 @@ export type {
   LlmSettings,
   LlmProvider,
   CursorSettings,
+  ClaudeSettings,
   CollectionSchema,
   QueryPlan,
   RunOutcome,

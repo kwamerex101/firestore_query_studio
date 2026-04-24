@@ -77,7 +77,12 @@ export async function createProfile(input: ProfileInput): Promise<Profile> {
       'SQL Server profiles are not available in the web build. Use the desktop app for MSSQL access.',
     );
   }
-  if (parsed.kind === 'emulator') {
+  if ('engine' in parsed && parsed.engine === 'bigquery') {
+    throw new Error(
+      'BigQuery profiles are not available in the web build. Use the desktop app — BigQuery auth requires a service-account JSON only the main process can read.',
+    );
+  }
+  if (!('kind' in parsed) || parsed.kind === 'emulator') {
     throw new Error(
       'The Firestore emulator flow requires the desktop app. In the web build, create a "live" profile and supply your Firebase Web config.',
     );

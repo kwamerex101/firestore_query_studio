@@ -1,4 +1,137 @@
 /**
+ * Turns raw Firestore run / connection errors into copy users can act on.
+ */
+export type RunErrorExplanation = {
+  title: string;
+  body: string;
+  technical: string;
+  showTechnical: boolean;
+  hint: string;
+};
+
+export function explainRunError(code: string, message: string): RunErrorExplanation {
+  const lower = `${code} ${message}`.toLowerCase();
+
+  if (code === 'PERMISSION_DENIED' || lower.includes('permission_denied')) {
+    return {
+      title: 'Access denied by Firestore',
+      body: 'Your account does not have permission to read this collection. This is usually a Firestore Security Rules restriction or a service account that is missing the required IAM role.',
+      technical: message,
+      showTechnical: true,
+      hint: 'Ask your Firebase admin to grant the "Cloud Datastore User" or "Firebase Admin SDK" role to the service account, or check your Security Rules.',
+    };
+  }
+
+  if (code === 'NOT_FOUND' || lower.includes('not found')) {
+    return {
+      title: 'Collection or document not found',
+      body: 'Firestore could not find the collection or document the query was looking for. It may be empty, or the collection name may be spelled differently in the database.',
+      technical: message,
+      showTechnical: false,
+      hint: 'Check the collection name in the Profiles tab and try refreshing the collection list.',
+    };
+  }
+
+  if (code === 'DEADLINE_EXCEEDED' || lower.includes('deadline exceeded')) {
+    return {
+      title: 'Query timed out',
+      body: 'The query took too long to complete. Large collections without a matching index often cause this. Try narrowing the question or selecting a specific collection.',
+      technical: message,
+      showTechnical: false,
+      hint: 'Add a composite index in the Firebase Console, or reduce the Scan Cap in your profile settings.',
+    };
+  }
+
+  if (code === 'RESOURCE_EXHAUSTED' || lower.includes('resource_exhausted') || lower.includes('quota')) {
+    return {
+      title: 'Firestore quota reached',
+      body: 'Your project has hit a read quota limit. This can happen on the free Spark plan or when many queries run in quick succession.',
+      technical: message,
+      showTechnical: true,
+      hint: 'Wait a moment and try again, or upgrade your Firebase project to the Blaze plan for higher limits.',
+    };
+  }
+
+  if (code === 'UNAUTHENTICATED' || lower.includes('unauthenticated')) {
+    return {
+      title: 'Not signed in to Firestore',
+      body: 'The app could not authenticate with Firebase. The service account credentials may have expired or been revoked.',
+      technical: message,
+      showTechnical: true,
+      hint: 'Re-open your profile and re-select the service account JSON file, then save and test the connection.',
+    };
+  }
+
+  if (code === 'INVALID_ARGUMENT' || lower.includes('invalid_argument')) {
+    return {
+      title: 'Invalid query',
+      body: 'Firestore rejected the query because of an invalid filter, ordering, or field path. This can happen when the generated query combines filters that require a composite index.',
+      technical: message,
+      showTechnical: true,
+      hint: 'Try rephrasing the question or use the "Create composite index" link if one appears below.',
+    };
+  }
+
+  if (code === 'CANCELLED' || lower.includes('cancelled')) {
+    return {
+      title: 'Query was cancelled',
+      body: 'The query was stopped before it finished. This can happen when switching profiles or when the result limit was reached.',
+      technical: message,
+      showTechnical: false,
+      hint: 'Start a new query to try again.',
+    };
+  }
+
+  if (code === 'PLAN_FAILED' || lower.includes('plan failed') || lower.includes('plan_failed')) {
+    return {
+      title: 'Could not understand the question',
+      body: 'The AI was unable to turn your question into a Firestore query. Try rephrasing it with more specific details about the collection or the field you are looking for.',
+      technical: message,
+      showTechnical: true,
+      hint: 'Be specific: instead of "find the user", try "find the user with email alice@example.com in the users collection".',
+    };
+  }
+
+  if (code === 'LLM_NOT_CONFIGURED' || lower.includes('api key') || lower.includes('llm')) {
+    return {
+      title: 'AI not configured',
+      body: 'No API key has been set up for the AI that turns your questions into queries.',
+      technical: message,
+      showTechnical: false,
+      hint: 'Go to the Settings tab and enter your OpenAI-compatible API key.',
+    };
+  }
+
+  if (code === 'NO_PROFILE' || lower.includes('no_profile') || lower.includes('no profile')) {
+    return {
+      title: 'No database selected',
+      body: 'Select or create a database profile before running a query.',
+      technical: message,
+      showTechnical: false,
+      hint: 'Go to the Profiles tab and set a profile as active.',
+    };
+  }
+
+  if (code === 'ABORTED' || lower.includes('aborted')) {
+    return {
+      title: 'Query was stopped',
+      body: 'The query was interrupted, usually because another query started or the connection was reset.',
+      technical: message,
+      showTechnical: false,
+      hint: 'Try running the query again.',
+    };
+  }
+
+  return {
+    title: 'Query failed',
+    body: 'Something went wrong while running this query. The technical details below can help diagnose the issue.',
+    technical: message || code,
+    showTechnical: true,
+    hint: 'If the problem persists, check your connection in the Profiles tab.',
+  };
+}
+
+/**
  * Turns raw SQL driver / probe IPC errors into copy users can act on, while
  * keeping the full server message for the "Technical details" fold-out.
  */

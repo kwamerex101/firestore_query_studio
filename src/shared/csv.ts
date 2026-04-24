@@ -52,3 +52,39 @@ export function sqlRowsToCsv(
     .join('\n');
   return `${header}\n${body}`;
 }
+
+/**
+ * Tab-separated values. Google Sheets' "Paste" recognizes TSV and splits
+ * into columns automatically — a round-trip that CSV can't do when the
+ * user's locale prefers semicolons. Cells containing tabs, newlines, or
+ * quotes are quoted using the same rules as `esc()`.
+ */
+function escTsv(v: unknown): string {
+  const s = formatCellText(v);
+  if (/["\t\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+export function firestoreRowsToTsv(
+  rows: Array<{ id: string; path: string; data: Record<string, unknown> }>,
+  columns: readonly string[],
+): string {
+  const header = ['__id', '__path', ...columns].map(escTsv).join('\t');
+  const body = rows
+    .map((r) =>
+      [r.id, r.path, ...columns.map((c) => r.data[c])].map(escTsv).join('\t'),
+    )
+    .join('\n');
+  return `${header}\n${body}`;
+}
+
+export function sqlRowsToTsv(
+  rows: ReadonlyArray<Record<string, unknown>>,
+  columns: ReadonlyArray<{ name: string }>,
+): string {
+  const header = columns.map((c) => escTsv(c.name)).join('\t');
+  const body = rows
+    .map((r) => columns.map((c) => escTsv(r[c.name])).join('\t'))
+    .join('\n');
+  return `${header}\n${body}`;
+}

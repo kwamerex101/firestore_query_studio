@@ -1,4 +1,5 @@
 import {
+  isBigQueryProfile,
   isFirestoreProfile,
   isMssqlProfile,
   isMysqlProfile,
@@ -13,18 +14,36 @@ import type {
   SqlProbeSchemasOutcome,
 } from './types';
 import { FirestoreDriver } from './firestore';
-import {
-  PostgresDriver,
-  probePostgresDatabases,
-  probePostgresSchemas,
-} from './postgres';
-import { MysqlDriver, probeMysqlDatabases } from './mysql';
-import {
-  MssqlDriver,
-  probeMssqlDatabases,
-  probeMssqlSchemas,
-} from './mssql';
 import { getProfileSecret } from '../profiles/secrets';
+
+/**
+ * Dynamic loaders for the relational drivers. Each relational driver module
+ * pulls in a native Node addon (`pg` → libpq bindings, `mysql2` → decimal
+ * parser, `mssql` → tedious). Loading them at startup for a Firestore-only
+ * user is wasted cost. We defer each import until the first time that
+ * engine is actually used, then cache the module.
+ */
+let postgresMod: typeof import('./postgres') | null = null;
+let mysqlMod: typeof import('./mysql') | null = null;
+let mssqlMod: typeof import('./mssql') | null = null;
+let bigqueryMod: typeof import('./bigquery') | null = null;
+
+async function loadPostgres() {
+  if (!postgresMod) postgresMod = await import('./postgres');
+  return postgresMod;
+}
+async function loadMysql() {
+  if (!mysqlMod) mysqlMod = await import('./mysql');
+  return mysqlMod;
+}
+async function loadMssql() {
+  if (!mssqlMod) mssqlMod = await import('./mssql');
+  return mssqlMod;
+}
+async function loadBigQuery() {
+  if (!bigqueryMod) bigqueryMod = await import('./bigquery');
+  return bigqueryMod;
+}
 
 /**
  * Factory that returns the right driver for a profile. For relational
@@ -37,16 +56,29 @@ export async function createDriver(profile: Profile): Promise<DatabaseDriver> {
     return FirestoreDriver.connect(profile);
   }
   if (isPostgresProfile(profile)) {
-    const password = await getProfileSecret(profile.id);
+    const [{ PostgresDriver }, password] = await Promise.all([
+      loadPostgres(),
+      getProfileSecret(profile.id),
+    ]);
     return PostgresDriver.connect(profile, password);
   }
   if (isMysqlProfile(profile)) {
-    const password = await getProfileSecret(profile.id);
+    const [{ MysqlDriver }, password] = await Promise.all([
+      loadMysql(),
+      getProfileSecret(profile.id),
+    ]);
     return MysqlDriver.connect(profile, password);
   }
   if (isMssqlProfile(profile)) {
-    const password = await getProfileSecret(profile.id);
+    const [{ MssqlDriver }, password] = await Promise.all([
+      loadMssql(),
+      getProfileSecret(profile.id),
+    ]);
     return MssqlDriver.connect(profile, password);
+  }
+  if (isBigQueryProfile(profile)) {
+    const { BigQueryDriver } = await loadBigQuery();
+    return BigQueryDriver.connect(profile);
   }
   // Exhaustiveness guard — if Engine gains a variant and nobody updates this
   // file, TypeScript will flag `profile` as `never` right here.
@@ -66,11 +98,21 @@ export async function probeSqlDatabases(
 ): Promise<SqlProbeDatabasesOutcome> {
   switch (engine) {
     case 'postgres':
-      return probePostgresDatabases(cfg);
+      return (await loadPostgres()).probePostgresDatabases(cfg);
     case 'mysql':
-      return probeMysqlDatabases(cfg);
+      return (await loadMysql()).probeMysqlDatabases(cfg);
     case 'mssql':
-      return probeMssqlDatabases(cfg);
+      return (await loadMssql()).probeMssqlDatabases(cfg);
+    case 'bigquery':
+      // BigQuery's "databases" are datasets and use a completely different
+      // auth shape (service-account JSON). Callers should route through
+      // `probeBigQueryDatasets` directly with a dedicated config.
+      return {
+        ok: false,
+        code: 'UNSUPPORTED_ENGINE',
+        message: 'BigQuery dataset listing uses a separate probe.',
+        elapsedMs: 0,
+      };
     default: {
       const _exhaustive: never = engine;
       return {
@@ -96,14 +138,21 @@ export async function probeSqlSchemas(
 ): Promise<SqlProbeSchemasOutcome> {
   switch (engine) {
     case 'postgres':
-      return probePostgresSchemas(cfg, database);
+      return (await loadPostgres()).probePostgresSchemas(cfg, database);
     case 'mssql':
-      return probeMssqlSchemas(cfg, database);
+      return (await loadMssql()).probeMssqlSchemas(cfg, database);
     case 'mysql':
       return {
         ok: false,
         code: 'UNSUPPORTED_ENGINE',
         message: 'MySQL has no distinct schema layer; use the database dropdown.',
+        elapsedMs: 0,
+      };
+    case 'bigquery':
+      return {
+        ok: false,
+        code: 'UNSUPPORTED_ENGINE',
+        message: 'BigQuery datasets map onto the database dropdown, not schemas.',
         elapsedMs: 0,
       };
     default: {
@@ -121,6 +170,3 @@ export async function probeSqlSchemas(
 export type { DatabaseDriver, SqlDriver } from './types';
 export { isSqlDriver } from './types';
 export { FirestoreDriver } from './firestore';
-export { PostgresDriver } from './postgres';
-export { MysqlDriver } from './mysql';
-export { MssqlDriver } from './mssql';

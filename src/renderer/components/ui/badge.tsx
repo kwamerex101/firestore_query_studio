@@ -23,6 +23,7 @@ const engineLabel: Record<Engine, string> = {
   postgres: 'Postgres',
   mysql: 'MySQL',
   mssql: 'SQL Server',
+  bigquery: 'BigQuery',
 };
 
 const engineClass: Record<Engine, string> = {
@@ -30,6 +31,7 @@ const engineClass: Record<Engine, string> = {
   postgres: 'border-sky-400/40 bg-sky-400/10 text-sky-400',
   mysql: 'border-teal-400/40 bg-teal-400/10 text-teal-400',
   mssql: 'border-indigo-400/40 bg-indigo-400/10 text-indigo-400',
+  bigquery: 'border-blue-400/40 bg-blue-400/10 text-blue-400',
 };
 
 export function EngineBadge({ engine, className, ...props }: EngineBadgeProps) {

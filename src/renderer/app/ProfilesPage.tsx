@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Plus,
   Trash2,
@@ -30,18 +30,19 @@ import type {
 import type { SqlProbeDraft } from '@shared/types/ipc';
 import { useAppState } from '../state/AppState';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+import { Input, Textarea } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { Dialog } from '../components/ui/dialog';
+import { InfoTip } from '../components/ui/tooltip';
 import { EnvBadge, EngineBadge } from '../components/ui/badge';
 import { useToast } from '../components/ui/toast';
 import { ServiceAccountPicker } from '../components/ServiceAccountPicker';
 import { FirebaseWebConfigDialog } from '../components/FirebaseWebConfigDialog';
 import { capabilities, ipc } from '../lib/ipcClient';
-import { explainSqlProbeError } from '@shared/probeErrorExplain';
+import { explainSqlProbeError, explainRunError } from '@shared/probeErrorExplain';
 import { cn } from '../lib/utils';
 
-type FormState = {
+export type FormState = {
   name: string;
   engine: Engine;
   envTag: EnvTag;
@@ -82,9 +83,13 @@ type FormState = {
   mssqlEncrypt: boolean;
   mssqlTrustServerCertificate: boolean;
   mssqlInstanceName: string;
+
+  // BigQuery-only
+  bqDefaultDataset: string;
+  bqLocation: string;
 };
 
-const emptyForm: FormState = {
+export const emptyForm: FormState = {
   name: '',
   engine: 'firestore',
   envTag: 'dev',
@@ -112,9 +117,12 @@ const emptyForm: FormState = {
   mssqlEncrypt: true,
   mssqlTrustServerCertificate: false,
   mssqlInstanceName: '',
+
+  bqDefaultDataset: '',
+  bqLocation: '',
 };
 
-function defaultPortFor(engine: Engine): string {
+export function defaultPortFor(engine: Engine): string {
   switch (engine) {
     case 'postgres':
       return '5432';
@@ -125,6 +133,99 @@ function defaultPortFor(engine: Engine): string {
     default:
       return '8080';
   }
+}
+
+export function buildProfileInputFromForm(form: FormState): ProfileInput {
+  if (form.engine === 'postgres') {
+    const base = {
+      engine: 'postgres' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      host: form.sqlHost.trim() || '127.0.0.1',
+      port: Number(form.sqlPort) || 5432,
+      database: form.sqlDatabase.trim(),
+      user: form.sqlUser.trim(),
+      sslMode: form.sslMode,
+      schema: form.pgSchema.trim() || 'public',
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+    return form.sqlPassword.length > 0
+      ? { ...base, password: form.sqlPassword }
+      : base;
+  }
+  if (form.engine === 'mysql') {
+    const base = {
+      engine: 'mysql' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      host: form.sqlHost.trim() || '127.0.0.1',
+      port: Number(form.sqlPort) || 3306,
+      database: form.sqlDatabase.trim(),
+      user: form.sqlUser.trim(),
+      sslMode: form.sslMode,
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+    return form.sqlPassword.length > 0
+      ? { ...base, password: form.sqlPassword }
+      : base;
+  }
+  if (form.engine === 'mssql') {
+    const base = {
+      engine: 'mssql' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      host: form.sqlHost.trim() || '127.0.0.1',
+      port: Number(form.sqlPort) || 1433,
+      database: form.sqlDatabase.trim(),
+      user: form.sqlUser.trim(),
+      encrypt: form.mssqlEncrypt,
+      trustServerCertificate: form.mssqlTrustServerCertificate,
+      instanceName:
+        form.mssqlInstanceName.trim().length > 0
+          ? form.mssqlInstanceName.trim()
+          : undefined,
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+    return form.sqlPassword.length > 0
+      ? { ...base, password: form.sqlPassword }
+      : base;
+  }
+  if (form.engine === 'bigquery') {
+    return {
+      engine: 'bigquery' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      projectId: form.projectId.trim(),
+      serviceAccountPath: form.serviceAccountPath.trim(),
+      defaultDataset: form.bqDefaultDataset.trim(),
+      location: form.bqLocation.trim(),
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 60_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+  }
+  const base = {
+    name: form.name.trim(),
+    envTag: form.envTag,
+    projectId: form.projectId.trim(),
+    scanCap: Number(form.scanCap),
+    sampleSize: Number(form.sampleSize),
+  };
+  if (form.kind === 'live') {
+    return {
+      kind: 'live' as const,
+      ...base,
+      serviceAccountPath: form.serviceAccountPath.trim(),
+    };
+  }
+  return {
+    kind: 'emulator' as const,
+    ...base,
+    host: form.host.trim() || '127.0.0.1',
+    port: Number(form.port) || 8080,
+  };
 }
 
 type TestState =
@@ -151,6 +252,13 @@ export function ProfilesPage() {
     setShowPassword(false);
     setDialogOpen(true);
   }
+
+  // Listen for the native menu's "File → New Profile" command.
+  useEffect(() => {
+    const handler = () => openNew();
+    window.addEventListener('fqs:newProfile', handler);
+    return () => window.removeEventListener('fqs:newProfile', handler);
+  }, []);
 
   function openEdit(p: Profile) {
     setEditing(p);
@@ -207,6 +315,19 @@ export function ProfilesPage() {
         mssqlTrustServerCertificate: p.trustServerCertificate,
         mssqlInstanceName: p.instanceName ?? '',
       });
+    } else if (p.engine === 'bigquery') {
+      setForm({
+        ...emptyForm,
+        name: p.name,
+        engine: 'bigquery',
+        envTag: p.envTag,
+        projectId: p.projectId,
+        serviceAccountPath: p.serviceAccountPath,
+        bqDefaultDataset: p.defaultDataset,
+        bqLocation: p.location,
+        queryTimeoutMs: String(p.queryTimeoutMs),
+        defaultLimit: String(p.defaultLimit),
+      });
     } else {
       setForm({
         ...emptyForm,
@@ -226,83 +347,7 @@ export function ProfilesPage() {
   }
 
   function buildProfileInput(): ProfileInput {
-    if (form.engine === 'postgres') {
-      const base = {
-        engine: 'postgres' as const,
-        name: form.name.trim(),
-        envTag: form.envTag,
-        host: form.sqlHost.trim() || '127.0.0.1',
-        port: Number(form.sqlPort) || 5432,
-        database: form.sqlDatabase.trim(),
-        user: form.sqlUser.trim(),
-        sslMode: form.sslMode,
-        schema: form.pgSchema.trim() || 'public',
-        queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
-        defaultLimit: Number(form.defaultLimit) || 500,
-      };
-      return form.sqlPassword.length > 0
-        ? { ...base, password: form.sqlPassword }
-        : base;
-    }
-    if (form.engine === 'mysql') {
-      const base = {
-        engine: 'mysql' as const,
-        name: form.name.trim(),
-        envTag: form.envTag,
-        host: form.sqlHost.trim() || '127.0.0.1',
-        port: Number(form.sqlPort) || 3306,
-        database: form.sqlDatabase.trim(),
-        user: form.sqlUser.trim(),
-        sslMode: form.sslMode,
-        queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
-        defaultLimit: Number(form.defaultLimit) || 500,
-      };
-      return form.sqlPassword.length > 0
-        ? { ...base, password: form.sqlPassword }
-        : base;
-    }
-    if (form.engine === 'mssql') {
-      const base = {
-        engine: 'mssql' as const,
-        name: form.name.trim(),
-        envTag: form.envTag,
-        host: form.sqlHost.trim() || '127.0.0.1',
-        port: Number(form.sqlPort) || 1433,
-        database: form.sqlDatabase.trim(),
-        user: form.sqlUser.trim(),
-        encrypt: form.mssqlEncrypt,
-        trustServerCertificate: form.mssqlTrustServerCertificate,
-        instanceName:
-          form.mssqlInstanceName.trim().length > 0
-            ? form.mssqlInstanceName.trim()
-            : undefined,
-        queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
-        defaultLimit: Number(form.defaultLimit) || 500,
-      };
-      return form.sqlPassword.length > 0
-        ? { ...base, password: form.sqlPassword }
-        : base;
-    }
-    const base = {
-      name: form.name.trim(),
-      envTag: form.envTag,
-      projectId: form.projectId.trim(),
-      scanCap: Number(form.scanCap),
-      sampleSize: Number(form.sampleSize),
-    };
-    if (form.kind === 'live') {
-      return {
-        kind: 'live' as const,
-        ...base,
-        serviceAccountPath: form.serviceAccountPath.trim(),
-      };
-    }
-    return {
-      kind: 'emulator' as const,
-      ...base,
-      host: form.host.trim() || '127.0.0.1',
-      port: Number(form.port) || 8080,
-    };
+    return buildProfileInputFromForm(form);
   }
 
   async function save() {
@@ -374,6 +419,20 @@ export function ProfilesPage() {
               form.sqlPassword.length > 0 ? form.sqlPassword : undefined,
           };
           await ipc.profiles.update({ id: editing.id, update });
+        } else if (editing.engine === 'bigquery') {
+          await ipc.profiles.update({
+            id: editing.id,
+            update: {
+              name,
+              envTag: form.envTag,
+              projectId: form.projectId.trim(),
+              serviceAccountPath: form.serviceAccountPath.trim(),
+              defaultDataset: form.bqDefaultDataset.trim(),
+              location: form.bqLocation.trim(),
+              queryTimeoutMs: Number(form.queryTimeoutMs) || 60_000,
+              defaultLimit: Number(form.defaultLimit) || 500,
+            },
+          });
         } else if (editing.kind === 'live') {
           const resolvedPath = await resolveServiceAccountPath(editing.id);
           await ipc.profiles.update({
@@ -442,7 +501,16 @@ export function ProfilesPage() {
             });
           }
         } else {
-          await ipc.profiles.create(input);
+          const created = await ipc.profiles.create(input);
+          // Web shell: Firestore profiles need a Firebase Web config before
+          // any query will work. Auto-open the config dialog right after
+          // creation so the user doesn't have to hunt for the key icon.
+          if (
+            capabilities.shell === 'web' &&
+            created.engine === 'firestore'
+          ) {
+            setWebConfigFor(created);
+          }
         }
         toast.push('Profile created', 'success');
       }
@@ -525,8 +593,20 @@ export function ProfilesPage() {
       </div>
 
       {profiles.length === 0 ? (
-        <div className="card text-center text-sm text-muted-foreground animate-fade-in-up">
-          No profiles yet. Add a Firestore project or a SQL server to get started.
+        <div className="card flex flex-col items-center gap-4 py-10 text-center text-sm text-muted-foreground animate-fade-in-up">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-secondary/60 text-primary">
+            <Link2 size={22} />
+          </div>
+          <div>
+            <p className="font-medium text-foreground">No connections yet</p>
+            <p className="mt-1 text-xs leading-relaxed max-w-xs">
+              Add a Firestore project or a SQL database to get started. You only need to do this once.
+            </p>
+          </div>
+          <Button variant="primary" onClick={openNew}>
+            <Plus size={14} />
+            Connect your first database
+          </Button>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -618,11 +698,19 @@ export function ProfilesPage() {
                 </Button>
               </div>
             </div>
-            <TestConnectionResultCard test={test} />
+            <TestConnectionResultCard test={test} engine={form.engine} />
           </div>
         }
       >
         <div className="grid gap-3">
+          {!editing && (
+            <QuickConnectInput
+              onParsed={(overrides) =>
+                setForm((f) => ({ ...f, ...overrides }))
+              }
+              disabled={busy}
+            />
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="label">Engine</label>
@@ -653,10 +741,16 @@ export function ProfilesPage() {
                 {capabilities.mssqlProfiles ? (
                   <option value="mssql">Microsoft SQL Server</option>
                 ) : null}
+                {capabilities.bigQueryProfiles ? (
+                  <option value="bigquery">Google BigQuery</option>
+                ) : null}
               </Select>
             </div>
             <div>
-              <label className="label">Environment</label>
+              <label className="label">
+                Environment
+                <InfoTip content="Purely a visual tag: dev/staging/prod. Prod profiles get a bold red banner and a confirmation dialog before each query." />
+              </label>
               <Select
                 value={form.envTag}
                 onChange={(e) => setForm({ ...form, envTag: e.target.value as EnvTag })}
@@ -691,7 +785,7 @@ export function ProfilesPage() {
               showPassword={showPassword}
               setShowPassword={setShowPassword}
             />
-          ) : (
+          ) : form.engine === 'mssql' ? (
             <MssqlFields
               form={form}
               setForm={setForm}
@@ -699,6 +793,8 @@ export function ProfilesPage() {
               showPassword={showPassword}
               setShowPassword={setShowPassword}
             />
+          ) : (
+            <BigQueryFields form={form} setForm={setForm} />
           )}
         </div>
       </Dialog>
@@ -786,6 +882,32 @@ function ProfileCardDetails({ profile }: { profile: Profile }) {
       </div>
     );
   }
+  if (profile.engine === 'bigquery') {
+    return (
+      <div className="text-xs text-muted-foreground">
+        <div className="truncate">
+          <span className="font-mono">{profile.projectId}</span>
+          {profile.defaultDataset && (
+            <> · dataset <span className="font-mono">{profile.defaultDataset}</span></>
+          )}
+        </div>
+        <div className="truncate" title={profile.serviceAccountPath || 'Using Application Default Credentials'}>
+          auth{' '}
+          <span className="font-mono">
+            {profile.serviceAccountPath ? 'service account' : 'ADC'}
+          </span>
+          {profile.location && (
+            <> · location <span className="font-mono">{profile.location}</span></>
+          )}
+        </div>
+        <div>
+          timeout <span className="font-mono">{profile.queryTimeoutMs}ms</span> · limit{' '}
+          <span className="font-mono">{profile.defaultLimit}</span>
+        </div>
+      </div>
+    );
+  }
+  // Firestore fallback.
   return (
     <div className="text-xs text-muted-foreground">
       <div>
@@ -882,11 +1004,17 @@ function FirestoreFields({
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className="label">Scan cap (max docs per scan)</label>
+          <label className="label">
+            Scan cap (max docs per scan)
+            <InfoTip content="Safety ceiling on how many documents the executor will stream in one run. Raise for large exports; lower to protect quota." />
+          </label>
           <Input value={form.scanCap} onChange={(e) => setForm({ ...form, scanCap: e.target.value })} />
         </div>
         <div>
-          <label className="label">Schema sample size</label>
+          <label className="label">
+            Schema sample size
+            <InfoTip content="Number of documents sampled to infer the collection's field types. Higher = more accurate; slower to refresh." />
+          </label>
           <Input value={form.sampleSize} onChange={(e) => setForm({ ...form, sampleSize: e.target.value })} />
         </div>
       </div>
@@ -920,7 +1048,8 @@ function SqlConnectionFields({
   databasePlaceholder,
   userPlaceholder,
 }: SqlFieldsProps & {
-  engine: SqlDialect;
+  /** Only the networked SQL engines have host/port/user — BigQuery uses service-account auth. */
+  engine: Exclude<SqlDialect, 'bigquery'>;
   hostPlaceholder?: string;
   databasePlaceholder?: string;
   userPlaceholder?: string;
@@ -1172,6 +1301,92 @@ function MssqlFields(props: SqlFieldsProps) {
   );
 }
 
+function BigQueryFields({
+  form,
+  setForm,
+}: {
+  form: FormState;
+  setForm: (next: FormState) => void;
+}) {
+  return (
+    <>
+      <div>
+        <label className="label">Google Cloud project ID</label>
+        <Input
+          value={form.projectId}
+          onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+          placeholder="my-analytics-project"
+        />
+        <HelpNotice>
+          Find it in the{' '}
+          <ExternalAnchor href="https://console.cloud.google.com/">
+            Google Cloud console
+          </ExternalAnchor>
+          . BigQuery bills the project that owns the query, which is often the same
+          project that owns the datasets but doesn't have to be.
+        </HelpNotice>
+      </div>
+      <div>
+        <ServiceAccountPicker
+          value={form.serviceAccountPath}
+          onChange={(path) => setForm({ ...form, serviceAccountPath: path })}
+          projectId={form.projectId}
+          importCopy={form.importCopy}
+          onImportChange={(next) => setForm({ ...form, importCopy: next })}
+        />
+        <HelpNotice>
+          Leave blank to use{' '}
+          <span className="font-medium">Application Default Credentials</span>{' '}
+          (the <span className="font-mono">gcloud auth application-default login</span>{' '}
+          session on this machine). Otherwise pick a service account with{' '}
+          <span className="font-mono">BigQuery Data Viewer</span> +{' '}
+          <span className="font-mono">BigQuery Job User</span> roles.
+        </HelpNotice>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label">Default dataset</label>
+          <Input
+            value={form.bqDefaultDataset}
+            onChange={(e) => setForm({ ...form, bqDefaultDataset: e.target.value })}
+            placeholder="analytics_prod"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Optional. Scopes the Profiles → table list and sample picker to a single dataset.
+          </p>
+        </div>
+        <div>
+          <label className="label">Location</label>
+          <Input
+            value={form.bqLocation}
+            onChange={(e) => setForm({ ...form, bqLocation: e.target.value })}
+            placeholder="US · EU · us-central1"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            BigQuery billing location. Leave blank to let the client infer.
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label">Query timeout (ms)</label>
+          <Input
+            value={form.queryTimeoutMs}
+            onChange={(e) => setForm({ ...form, queryTimeoutMs: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="label">Default row limit</label>
+          <Input
+            value={form.defaultLimit}
+            onChange={(e) => setForm({ ...form, defaultLimit: e.target.value })}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
 /**
  * Prominent “Test connection” control: uses the default `btn` surface (border +
  * background + hover) so it reads as an action, not link text. Status appears
@@ -1218,8 +1433,9 @@ function TestConnectionControl({
  * Full-width card under the footer action row. Shows in-progress, success, or
  * error results so long messages (e.g. server version) are not squeezed inline.
  */
-function TestConnectionResultCard({ test }: { test: TestState }) {
+function TestConnectionResultCard({ test, engine }: { test: TestState; engine: Engine }) {
   const toast = useToast();
+  const [showTechnical, setShowTechnical] = useState(false);
 
   async function copyError() {
     if (test.status !== 'err') return;
@@ -1266,6 +1482,12 @@ function TestConnectionResultCard({ test }: { test: TestState }) {
     );
   }
   if (test.status !== 'err') return null;
+
+  const explanation =
+    engine === 'firestore'
+      ? explainRunError(test.code, test.message)
+      : null;
+
   return (
     <div
       role="alert"
@@ -1274,21 +1496,59 @@ function TestConnectionResultCard({ test }: { test: TestState }) {
       <div className="flex w-full min-w-0 items-start gap-2 px-3 py-2.5">
         <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-env-prod" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-env-prod">Connection failed</p>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-env-prod/95">
-            <span className="font-mono text-[11px] text-env-prod">Code {test.code}</span>
-            <button
-              type="button"
-              onClick={copyError}
-              className="inline-flex items-center gap-0.5 rounded text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Copy size={12} aria-hidden />
-              Copy error
-            </button>
-          </div>
-          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-foreground/90 [overflow-wrap:anywhere]">
-            {test.message}
-          </pre>
+          {explanation ? (
+            <>
+              <p className="font-medium text-env-prod">{explanation.title}</p>
+              <p className="mt-1 text-xs text-foreground/80 leading-relaxed">{explanation.body}</p>
+              {explanation.hint ? (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  <span className="font-medium">Tip: </span>{explanation.hint}
+                </p>
+              ) : null}
+              {explanation.showTechnical ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTechnical((v) => !v)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+                  >
+                    {showTechnical ? 'Hide technical details' : 'Show technical details'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyError}
+                    className="inline-flex items-center gap-0.5 rounded text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Copy size={11} aria-hidden />
+                    Copy
+                  </button>
+                </div>
+              ) : null}
+              {showTechnical ? (
+                <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-foreground/80 rounded border border-border bg-secondary/50 p-2 [overflow-wrap:anywhere]">
+                  {explanation.technical}
+                </pre>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-env-prod">Connection failed</p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-env-prod/95">
+                <span className="font-mono text-[11px] text-env-prod">Code {test.code}</span>
+                <button
+                  type="button"
+                  onClick={copyError}
+                  className="inline-flex items-center gap-0.5 rounded text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Copy size={12} aria-hidden />
+                  Copy error
+                </button>
+              </div>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-foreground/90 [overflow-wrap:anywhere]">
+                {test.message}
+              </pre>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1364,7 +1624,7 @@ type ProbeStatus = 'idle' | 'loading' | 'ok' | 'err';
  */
 function buildProbeDraft(
   form: FormState,
-  engine: SqlDialect,
+  engine: Exclude<SqlDialect, 'bigquery'>,
   editing: Profile | null,
 ): SqlProbeDraft | null {
   const host = form.sqlHost.trim();
@@ -1400,7 +1660,7 @@ function buildProbeDraft(
 
 function probeRequestFor(
   form: FormState,
-  engine: SqlDialect,
+  engine: Exclude<SqlDialect, 'bigquery'>,
   editing: Profile | null,
 ): { profileId?: string; draft?: SqlProbeDraft } | null {
   const draft = buildProbeDraft(form, engine, editing);
@@ -1431,7 +1691,7 @@ function DatabaseCombobox({
   form: FormState;
   setForm: (next: FormState) => void;
   editing: Profile | null;
-  engine: SqlDialect;
+  engine: Exclude<SqlDialect, 'bigquery'>;
   placeholder?: string;
 }) {
   const [status, setStatus] = useState<ProbeStatus>('idle');
@@ -1536,7 +1796,7 @@ function SchemaCombobox({
   form: FormState;
   setForm: (next: FormState) => void;
   editing: Profile | null;
-  engine: SqlDialect;
+  engine: Exclude<SqlDialect, 'bigquery'>;
   placeholder?: string;
 }) {
   const [status, setStatus] = useState<ProbeStatus>('idle');
@@ -1670,6 +1930,158 @@ function ProbeActionButtons({
           <Pencil size={12} />
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Parses a Firebase Web config snippet (JSON object, or the JS object-literal
+ * form copy-pasted from the Firebase console) and extracts `projectId` as a
+ * partial Firestore profile. Handles both:
+ *
+ *   { "projectId": "my-proj", "apiKey": "…" }
+ *
+ * and the console-style:
+ *
+ *   const firebaseConfig = { projectId: "my-proj", … };
+ *
+ * Returns null when the input doesn't look like a Firebase config.
+ */
+export function parseFirebaseConfig(raw: string): Partial<FormState> | null {
+  const trimmed = raw.trim();
+  if (!/projectId/i.test(trimmed)) return null;
+
+  // Isolate the {...} object literal if wrapped in assignment / export syntax.
+  const braceStart = trimmed.indexOf('{');
+  const braceEnd = trimmed.lastIndexOf('}');
+  if (braceStart === -1 || braceEnd === -1 || braceEnd <= braceStart) return null;
+  const inner = trimmed.slice(braceStart, braceEnd + 1);
+
+  // Try strict JSON first, then fall back to a safer regex extraction of
+  // just the projectId field to avoid eval-ing attacker-supplied input.
+  let projectId: string | undefined;
+  try {
+    const parsed = JSON.parse(inner) as Record<string, unknown>;
+    if (typeof parsed.projectId === 'string') projectId = parsed.projectId;
+  } catch {
+    const m = inner.match(/projectId\s*:\s*["']([^"']+)["']/);
+    if (m) projectId = m[1];
+  }
+  if (!projectId) return null;
+
+  return {
+    engine: 'firestore',
+    kind: 'live',
+    projectId,
+  };
+}
+
+/**
+ * Parses a connection string (postgres://, mysql://, mssql://) into FormState
+ * partial overrides. Returns null when the string can't be parsed.
+ */
+export function parseConnectionString(
+  raw: string,
+  current: FormState,
+): Partial<FormState> | null {
+  try {
+    const url = new URL(raw.trim());
+    const protocol = url.protocol.replace(':', '').toLowerCase();
+    const engineMap: Record<string, Engine> = {
+      postgres: 'postgres',
+      postgresql: 'postgres',
+      mysql: 'mysql',
+      mariadb: 'mysql',
+      mssql: 'mssql',
+      sqlserver: 'mssql',
+      'mssql+pyodbc': 'mssql',
+    };
+    const engine = engineMap[protocol];
+    if (!engine) return null;
+
+    const host = url.hostname || '127.0.0.1';
+    const port = url.port || defaultPortFor(engine);
+    const database = url.pathname.replace(/^\//, '').split('?')[0];
+    const user = url.username ? decodeURIComponent(url.username) : '';
+    const password = url.password ? decodeURIComponent(url.password) : '';
+
+    return {
+      engine,
+      sqlHost: host,
+      sqlPort: port,
+      sqlDatabase: database,
+      sqlUser: user,
+      sqlPassword: password,
+      sqlPasswordTouched: password.length > 0,
+      pgSchema:
+        engine === 'postgres'
+          ? (url.searchParams.get('schema') ?? current.pgSchema)
+          : current.pgSchema,
+      sslMode:
+        (url.searchParams.get('sslmode') as FormState['sslMode']) ?? current.sslMode,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function QuickConnectInput({
+  onParsed,
+  disabled,
+}: {
+  onParsed: (overrides: Partial<FormState>) => void;
+  disabled: boolean;
+}) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+  const [parsedAs, setParsedAs] = useState<'sql' | 'firebase' | null>(null);
+
+  function handleChange(raw: string) {
+    setValue(raw);
+    setError('');
+    setParsedAs(null);
+    if (!raw.trim()) return;
+    const sql = parseConnectionString(raw, emptyForm);
+    if (sql) {
+      onParsed(sql);
+      setParsedAs('sql');
+      return;
+    }
+    const firebase = parseFirebaseConfig(raw);
+    if (firebase) {
+      onParsed(firebase);
+      setParsedAs('firebase');
+      return;
+    }
+    if (raw.includes('://') || /projectId/i.test(raw)) {
+      setError(
+        'Could not parse. Supported: postgres://, mysql://, mssql://, or a Firebase Web config snippet.',
+      );
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-dashed border-border bg-secondary/30 p-3">
+      <label className="label mb-1 flex items-center gap-1.5">
+        <Link2 size={12} className="text-muted-foreground" />
+        Quick Connect — paste a connection string or Firebase config
+      </label>
+      <Textarea
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder='postgres://user:pass@host:5432/mydb  —or—  { "projectId": "my-proj", "apiKey": "…" }'
+        rows={2}
+        disabled={disabled}
+        className="font-mono text-xs"
+      />
+      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+      {!error && parsedAs && (
+        <p className="mt-1 text-[11px] text-green-600 dark:text-green-400">
+          {parsedAs === 'firebase'
+            ? 'Parsed Firebase config — project ID filled in. Drop your service-account JSON below.'
+            : 'Parsed connection string — fields below have been filled in.'}
+        </p>
+      )}
     </div>
   );
 }

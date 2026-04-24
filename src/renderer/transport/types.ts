@@ -56,6 +56,16 @@ export type FqsApi = {
       req?: IpcRequest<typeof IpcChannels.cursorTest>,
     ): Promise<IpcResponse<typeof IpcChannels.cursorTest>>;
   };
+  claude: {
+    get(): Promise<IpcResponse<typeof IpcChannels.claudeGet>>;
+    set(
+      req: IpcRequest<typeof IpcChannels.claudeSet>,
+    ): Promise<IpcResponse<typeof IpcChannels.claudeSet>>;
+    listModels(): Promise<IpcResponse<typeof IpcChannels.claudeListModels>>;
+    test(
+      req?: IpcRequest<typeof IpcChannels.claudeTest>,
+    ): Promise<IpcResponse<typeof IpcChannels.claudeTest>>;
+  };
   provider: {
     get(): Promise<IpcResponse<typeof IpcChannels.providerGet>>;
     set(
@@ -196,6 +206,8 @@ export interface TransportCapabilities {
   readonly mysqlProfiles: boolean;
   /** Desktop supports SQL Server via the `mssql` package; web cannot. */
   readonly mssqlProfiles: boolean;
+  /** Desktop supports Google BigQuery via `@google-cloud/bigquery`; web cannot. */
+  readonly bigQueryProfiles: boolean;
   /** Desktop supports Cursor CLI as a planner backend; web cannot. */
   readonly cursorCli: boolean;
   /** Web uses IndexedDB with a device-scoped key, which is weaker than the OS keychain. */

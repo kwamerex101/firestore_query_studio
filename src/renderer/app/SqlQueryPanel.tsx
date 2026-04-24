@@ -18,10 +18,11 @@ import { Textarea } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { useToast } from '../components/ui/toast';
 import { SqlResultsTable } from './SqlResultsTable';
+import { maybeNotifySlowQuery } from '../lib/slackNotify';
 import { cn } from '../lib/utils';
 
 interface SqlQueryPanelProps {
-  profile: Profile & { engine: 'postgres' | 'mysql' | 'mssql' };
+  profile: Profile & { engine: 'postgres' | 'mysql' | 'mssql' | 'bigquery' };
   hasLlmConfigured: boolean;
 }
 
@@ -129,6 +130,14 @@ export function SqlQueryPanel({ profile, hasLlmConfigured }: SqlQueryPanelProps)
           `Returned ${res.rows.length} row${res.rows.length === 1 ? '' : 's'} in ${res.elapsedMs}ms`,
           'success',
         );
+        void maybeNotifySlowQuery({
+          question: question.trim() || '(SQL run)',
+          target: profile.engine,
+          rowCount: res.rows.length,
+          durationMs: res.elapsedMs,
+          ok: true,
+          profileName: profile.name,
+        });
       }
       const runLimit = limit ?? effectivePlan?.limit ?? profile.defaultLimit;
       const sqlPlanForHistory: SqlPlan = effectivePlan

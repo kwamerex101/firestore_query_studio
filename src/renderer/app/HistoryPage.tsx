@@ -208,7 +208,7 @@ export function HistoryPage({ onRequestSwitchToQuery }: { onRequestSwitchToQuery
 
       <div className="min-h-0 flex-1 overflow-auto">
         {entries.length === 0 ? (
-          <EmptyState />
+          <EmptyState onGoToQuery={onRequestSwitchToQuery} />
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
             No entries match &ldquo;{search}&rdquo;.
@@ -374,6 +374,7 @@ const engineMeta: Record<Engine, { label: string; icon: LucideIcon }> = {
   postgres: { label: 'Postgres', icon: Database },
   mysql: { label: 'MySQL', icon: Database },
   mssql: { label: 'SQL Server', icon: Database },
+  bigquery: { label: 'BigQuery', icon: Database },
 };
 
 function getDatabaseName(profile: Profile): string {
@@ -381,6 +382,11 @@ function getDatabaseName(profile: Profile): string {
   if (isPostgresProfile(profile)) return profile.database;
   if (isMysqlProfile(profile)) return profile.database;
   if (isMssqlProfile(profile)) return profile.database;
+  if (profile.engine === 'bigquery') {
+    return profile.defaultDataset
+      ? `${profile.projectId}.${profile.defaultDataset}`
+      : profile.projectId;
+  }
   // Exhaustiveness guard — adding a new engine variant will fail here.
   const _exhaustive: never = profile;
   return (_exhaustive as { name?: string }).name ?? '';
@@ -626,15 +632,25 @@ function SqlHistoryDetail({
   );
 }
 
-function EmptyState() {
+function EmptyState({ onGoToQuery }: { onGoToQuery: () => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/60 text-primary">
-        <HistoryIcon size={20} />
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center text-sm text-muted-foreground animate-fade-in">
+      <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-secondary/60 text-primary">
+        <HistoryIcon size={24} />
       </div>
-      <div>
-        No queries yet. Every question or SQL run for this profile is saved here.
+      <div className="max-w-xs">
+        <p className="font-medium text-foreground">No queries yet</p>
+        <p className="mt-1 text-xs leading-relaxed">
+          Every question or SQL run for this profile is saved here so you can revisit and reuse them.
+        </p>
       </div>
+      <button
+        type="button"
+        onClick={onGoToQuery}
+        className="rounded-md border border-primary/60 bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/25 hover:-translate-y-px"
+      >
+        Ask your first question →
+      </button>
     </div>
   );
 }

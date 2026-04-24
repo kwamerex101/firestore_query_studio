@@ -1,5 +1,6 @@
 import type {
   CursorSettings,
+  ClaudeSettings,
   LlmProvider,
   LlmSettings,
 } from '@shared/types/profile';
@@ -13,11 +14,13 @@ import {
   type ChatBackend,
 } from '@shared/planner';
 import { chatViaCursor } from './cursorCli';
+import { chatViaClaude } from './claudeCli';
 
 export interface VisualsDeps {
   provider: LlmProvider;
   settings: LlmSettings | null;
   cursorSettings: CursorSettings | null;
+  claudeSettings: ClaudeSettings | null;
 }
 
 /**
@@ -67,6 +70,30 @@ function resolveBackend(deps: VisualsDeps): BackendResolution {
       ok: true,
       chat: (messages, opts) =>
         chatViaCursor(deps.cursorSettings!, {
+          messages,
+          timeoutMs: opts.timeoutMs ?? timeoutMs,
+        }),
+      overrides: { timeoutMs, retries: 0 },
+    };
+  }
+
+  if (deps.provider === 'claude-cli') {
+    if (!deps.claudeSettings) {
+      return {
+        ok: false,
+        outcome: {
+          ok: false,
+          code: 'CLAUDE_NOT_CONFIGURED',
+          message:
+            'Claude CLI provider is selected but no Claude settings are saved. Configure it in Settings → Claude CLI.',
+        },
+      };
+    }
+    const timeoutMs = deps.claudeSettings.timeoutMs ?? 60_000;
+    return {
+      ok: true,
+      chat: (messages, opts) =>
+        chatViaClaude(deps.claudeSettings!, {
           messages,
           timeoutMs: opts.timeoutMs ?? timeoutMs,
         }),

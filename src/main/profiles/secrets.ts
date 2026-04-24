@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   LlmSettings,
   CursorSettings,
+  ClaudeSettings,
   LlmProvider,
 } from '@shared/types/profile';
 
@@ -13,6 +14,7 @@ const PLAIN_FALLBACK_FILENAME = 'secrets.plain.json';
 type SecretsShape = {
   llm?: LlmSettings;
   cursor?: CursorSettings;
+  claude?: ClaudeSettings;
   provider?: LlmProvider;
   /**
    * Per-profile secrets (e.g. Postgres passwords). Keyed by profile id.
@@ -109,6 +111,27 @@ export async function setCursorSettings(settings: CursorSettings): Promise<Curso
 export async function clearCursorSettings(): Promise<void> {
   const data = await readRaw();
   delete data.cursor;
+  await writeRaw(data);
+}
+
+export async function getClaudeSettings(): Promise<ClaudeSettings | null> {
+  const data = await readRaw();
+  if (!data.claude) return null;
+  const parsed = ClaudeSettings.safeParse(data.claude);
+  return parsed.success ? parsed.data : null;
+}
+
+export async function setClaudeSettings(settings: ClaudeSettings): Promise<ClaudeSettings> {
+  const parsed = ClaudeSettings.parse(settings);
+  const data = await readRaw();
+  data.claude = parsed;
+  await writeRaw(data);
+  return parsed;
+}
+
+export async function clearClaudeSettings(): Promise<void> {
+  const data = await readRaw();
+  delete data.claude;
   await writeRaw(data);
 }
 
