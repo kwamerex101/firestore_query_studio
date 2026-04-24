@@ -8,9 +8,11 @@ const HistoryPage = lazy(() => import('./HistoryPage').then((m) => ({ default: m
 import { EnvBadge, EngineBadge } from '../components/ui/badge';
 import { WebAuthBanner } from '../components/WebAuthBanner';
 import { PwaInstallBanner } from '../components/PwaInstallBanner';
+import { UpdateBanner } from '../components/UpdateBanner';
 import { ConnectionHealth } from '../components/ConnectionHealth';
 import { OnboardingWizard } from './OnboardingWizard';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { useMenuCommands } from '../hooks/useMenuCommands';
 import { cn } from '../lib/utils';
 
 type Tab = 'query' | 'history' | 'profiles' | 'settings';
@@ -31,6 +33,31 @@ export function App() {
   useEffect(() => {
     if (pendingHistory) setTab('query');
   }, [pendingHistory]);
+
+  // Native menu commands → tab navigation + broadcast UI events.
+  useMenuCommands((command, arg) => {
+    if (command === 'menu:navigate' && typeof arg === 'string') {
+      if (['query', 'history', 'profiles', 'settings'].includes(arg)) {
+        setTab(arg as Tab);
+      }
+      return;
+    }
+    if (command === 'menu:newProfile') {
+      setTab('profiles');
+      // ProfilesPage listens for this event to open its New Profile dialog.
+      window.dispatchEvent(new CustomEvent('fqs:newProfile'));
+      return;
+    }
+    if (command === 'menu:clearHistory') {
+      setTab('history');
+      window.dispatchEvent(new CustomEvent('fqs:clearHistory'));
+      return;
+    }
+    if (command === 'menu:checkForUpdates') {
+      window.dispatchEvent(new CustomEvent('fqs:checkForUpdates'));
+      return;
+    }
+  });
 
   if (loading) {
     return <LoadingScreen />;
@@ -69,6 +96,7 @@ export function App() {
       </header>
 
       <OnboardingWizard />
+      <UpdateBanner />
       <EnvStrip />
       <WebAuthBanner />
       <OfflineBanner />

@@ -30,6 +30,7 @@ const SqlQueryPanel = lazy(() => import('./SqlQueryPanel').then((m) => ({ defaul
 import { isSqlProfile } from '@shared/types/profile';
 import { explainRunError } from '@shared/probeErrorExplain';
 import { encodeShareUrl, decodeShareUrl } from '../lib/shareUrl';
+import { maybeNotifySlowQuery } from '../lib/slackNotify';
 import { cn } from '../lib/utils';
 
 type RightTab = 'explain' | 'insights' | 'schema';
@@ -197,6 +198,18 @@ export function QueryPage({ onSwitchToProfiles }: { onSwitchToProfiles?: () => v
           `Returned ${res.rows.length} row${res.rows.length === 1 ? '' : 's'}`,
           'success',
         );
+      }
+      // Fire-and-forget Slack notification when the run crossed the
+      // user-configured slow-query threshold.
+      if (res.ok) {
+        void maybeNotifySlowQuery({
+          question: context?.question ?? planContext?.question ?? '(no question)',
+          target: context?.collection ?? planContext?.collection ?? '(auto)',
+          rowCount: res.rows.length,
+          durationMs: res.stats.durationMs,
+          ok: true,
+          profileName: activeProfile?.name,
+        });
       }
       // Persist to history. We save successes and failures both; failed
       // runs are still valuable to revisit (e.g. composite-index errors).

@@ -136,6 +136,55 @@ const api = {
     importServiceAccount: (input: unknown) =>
       invoke(IpcChannels.dialogImportServiceAccount, input),
   },
+  menu: {
+    /**
+     * Subscribe to native-menu events emitted from `src/main/menu.ts`.
+     * The returned disposer tears down the listener on unmount.
+     */
+    onCommand: (cb: (command: string, arg?: unknown) => void) => {
+      const channels = [
+        'menu:newProfile',
+        'menu:navigate',
+        'menu:clearHistory',
+        'menu:checkForUpdates',
+      ];
+      const listeners = channels.map((ch) => {
+        const fn = (_e: IpcRendererEvent, arg?: unknown) => cb(ch, arg);
+        ipcRenderer.on(ch, fn);
+        return { ch, fn };
+      });
+      return () => {
+        for (const { ch, fn } of listeners) ipcRenderer.off(ch, fn);
+      };
+    },
+  },
+  updater: {
+    /** Fire-and-forget: ask the main process to run an update check now. */
+    checkNow: () => ipcRenderer.send('updater:checkNow'),
+    /** Quit the app and install the already-downloaded update. */
+    installNow: () => ipcRenderer.send('updater:installNow'),
+    /** Subscribe to updater lifecycle events. Returns a disposer. */
+    onEvent: (
+      cb: (event: string, payload?: unknown) => void,
+    ) => {
+      const channels = [
+        'updater:checking',
+        'updater:available',
+        'updater:none',
+        'updater:progress',
+        'updater:downloaded',
+        'updater:error',
+      ];
+      const listeners = channels.map((ch) => {
+        const fn = (_e: IpcRendererEvent, payload?: unknown) => cb(ch, payload);
+        ipcRenderer.on(ch, fn);
+        return { ch, fn };
+      });
+      return () => {
+        for (const { ch, fn } of listeners) ipcRenderer.off(ch, fn);
+      };
+    },
+  },
 } as const;
 
 contextBridge.exposeInMainWorld('fqs', api);

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Plus,
   Trash2,
@@ -232,6 +232,13 @@ export function ProfilesPage() {
     setShowPassword(false);
     setDialogOpen(true);
   }
+
+  // Listen for the native menu's "File → New Profile" command.
+  useEffect(() => {
+    const handler = () => openNew();
+    window.addEventListener('fqs:newProfile', handler);
+    return () => window.removeEventListener('fqs:newProfile', handler);
+  }, []);
 
   function openEdit(p: Profile) {
     setEditing(p);

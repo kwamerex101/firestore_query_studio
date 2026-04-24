@@ -1,7 +1,18 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { registerIpcHandlers } from './ipc/router';
 import { disposeCurrent } from './firestore/connectionManager';
+import { installAppMenu } from './menu';
+import { installTray, destroyTray } from './tray';
+import {
+  registerGlobalShortcut,
+  unregisterGlobalShortcut,
+} from './shortcut';
+import {
+  installAutoUpdater,
+  checkForUpdatesNow,
+  installDownloadedUpdate,
+} from './updater';
 
 const isDev = !app.isPackaged;
 
@@ -36,7 +47,14 @@ async function createWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   registerIpcHandlers();
+  installAppMenu();
   await createWindow();
+  installTray();
+  registerGlobalShortcut();
+  installAutoUpdater();
+
+  ipcMain.on('updater:checkNow', () => void checkForUpdatesNow());
+  ipcMain.on('updater:installNow', () => installDownloadedUpdate());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
@@ -49,5 +67,7 @@ app.on('window-all-closed', async () => {
 });
 
 app.on('will-quit', async () => {
+  unregisterGlobalShortcut();
+  destroyTray();
   await disposeCurrent();
 });
