@@ -21,6 +21,7 @@ import { Input, Textarea } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { useToast } from '../components/ui/toast';
 import { Dialog } from '../components/ui/dialog';
+import { InfoTip } from '../components/ui/tooltip';
 import { ResultsTable } from './ResultsTable';
 const ExplainPanel = lazy(() => import('./ExplainPanel').then((m) => ({ default: m.ExplainPanel })));
 const SchemaEditor = lazy(() => import('./SchemaEditor').then((m) => ({ default: m.SchemaEditor })));
@@ -431,6 +432,7 @@ export function QueryPage({ onSwitchToProfiles }: { onSwitchToProfiles?: () => v
               <label className="label">
                 <Sparkles size={10} className="mr-1 inline-block align-[-1px]" />
                 Natural-language question
+                <InfoTip content="Describe what you want to know in plain English. The AI picks the collection, fields, and filters. Press ⌘↵ to build & run." />
               </label>
               <Textarea
                 value={question}
@@ -446,7 +448,10 @@ export function QueryPage({ onSwitchToProfiles }: { onSwitchToProfiles?: () => v
               />
             </div>
             <div>
-              <label className="label">Collection</label>
+              <label className="label">
+                Collection
+                <InfoTip content="Leave empty to let the AI pick from your schema. Pin to a specific collection when you know where the data lives." />
+              </label>
               <div className="flex gap-1">
                 <Select value={collection} onChange={(e) => setCollection(e.target.value)}>
                   <option value="">(let LLM pick)</option>
@@ -474,6 +479,7 @@ export function QueryPage({ onSwitchToProfiles }: { onSwitchToProfiles?: () => v
                   className="h-3 w-3 accent-primary transition-all"
                 />
                 Run plan automatically after build
+                <InfoTip content="When on, pressing ⌘↵ both builds the plan and executes it. Turn off to review the plan before running." />
               </label>
             </div>
             <div className="flex flex-col gap-1 pt-4">

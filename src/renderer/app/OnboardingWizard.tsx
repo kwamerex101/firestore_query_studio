@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Database, Key, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
+import { ServiceAccountPicker } from '../components/ServiceAccountPicker';
 import { useAppState } from '../state/AppState';
-import { ipc } from '../lib/ipcClient';
+import { capabilities, ipc } from '../lib/ipcClient';
 import { cn } from '../lib/utils';
 import {
   emptyForm,
@@ -212,9 +213,9 @@ function ConnectStep({
           <label className="label">Database type</label>
           <Select value={form.engine} onChange={(e) => onEngineChange(e.target.value as Engine)}>
             <option value="firestore">Firestore</option>
-            <option value="postgres">PostgreSQL</option>
-            <option value="mysql">MySQL / MariaDB</option>
-            <option value="mssql">SQL Server</option>
+            {capabilities.postgresProfiles && <option value="postgres">PostgreSQL</option>}
+            {capabilities.mysqlProfiles && <option value="mysql">MySQL / MariaDB</option>}
+            {capabilities.mssqlProfiles && <option value="mssql">SQL Server</option>}
           </Select>
         </div>
 
@@ -243,18 +244,37 @@ function ConnectStep({
 }
 
 function FirestoreQuickFields({ form, setForm }: { form: FormState; setForm(f: FormState): void }) {
+  const isWeb = capabilities.shell === 'web';
+  // In web builds the Admin SDK isn't available — force emulator kind so we
+  // never render the service-account picker (browsers can't resolve absolute
+  // file paths, so Drop/Browse can't produce a usable path for live profiles).
+  useEffect(() => {
+    if (isWeb && form.kind !== 'emulator') {
+      setForm({ ...form, kind: 'emulator', serviceAccountPath: '' });
+    }
+  }, [isWeb, form, setForm]);
   return (
     <>
-      <div>
-        <label className="label">Kind</label>
-        <Select
-          value={form.kind}
-          onChange={(e) => setForm({ ...form, kind: e.target.value as ProfileKind })}
-        >
-          <option value="emulator">Emulator (local)</option>
-          <option value="live">Live (Admin SDK)</option>
-        </Select>
-      </div>
+      {!isWeb && (
+        <div>
+          <label className="label">Kind</label>
+          <Select
+            value={form.kind}
+            onChange={(e) => setForm({ ...form, kind: e.target.value as ProfileKind })}
+          >
+            <option value="emulator">Emulator (local)</option>
+            <option value="live">Live (Admin SDK)</option>
+          </Select>
+        </div>
+      )}
+      {isWeb && (
+        <p className="rounded-md border border-border bg-secondary/30 px-3 py-2 text-[11px] text-muted-foreground">
+          Browser builds connect to the Firestore <strong>Emulator</strong> directly.
+          For a live Firestore project, finish the wizard with any values, then open{' '}
+          <strong>Profiles</strong> and add your Firebase Web config — the browser uses
+          Firebase Auth, not service-account JSON.
+        </p>
+      )}
       <div>
         <label className="label">Firebase Project ID</label>
         <Input
@@ -265,11 +285,12 @@ function FirestoreQuickFields({ form, setForm }: { form: FormState; setForm(f: F
       </div>
       {form.kind === 'live' ? (
         <div>
-          <label className="label">Service account JSON path</label>
-          <Input
+          <ServiceAccountPicker
             value={form.serviceAccountPath}
-            onChange={(e) => setForm({ ...form, serviceAccountPath: e.target.value })}
-            placeholder="/path/to/service-account.json"
+            onChange={(path) => setForm({ ...form, serviceAccountPath: path })}
+            projectId={form.projectId}
+            importCopy={form.importCopy}
+            onImportChange={(next) => setForm({ ...form, importCopy: next })}
           />
           <p className="mt-1 text-[11px] text-muted-foreground">
             Firebase console → Project settings → Service accounts → Generate new private key

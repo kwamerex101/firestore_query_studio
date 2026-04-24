@@ -30,9 +30,10 @@ import type {
 import type { SqlProbeDraft } from '@shared/types/ipc';
 import { useAppState } from '../state/AppState';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+import { Input, Textarea } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { Dialog } from '../components/ui/dialog';
+import { InfoTip } from '../components/ui/tooltip';
 import { EnvBadge, EngineBadge } from '../components/ui/badge';
 import { useToast } from '../components/ui/toast';
 import { ServiceAccountPicker } from '../components/ServiceAccountPicker';
@@ -446,7 +447,16 @@ export function ProfilesPage() {
             });
           }
         } else {
-          await ipc.profiles.create(input);
+          const created = await ipc.profiles.create(input);
+          // Web shell: Firestore profiles need a Firebase Web config before
+          // any query will work. Auto-open the config dialog right after
+          // creation so the user doesn't have to hunt for the key icon.
+          if (
+            capabilities.shell === 'web' &&
+            created.engine === 'firestore'
+          ) {
+            setWebConfigFor(created);
+          }
         }
         toast.push('Profile created', 'success');
       }
@@ -680,7 +690,10 @@ export function ProfilesPage() {
               </Select>
             </div>
             <div>
-              <label className="label">Environment</label>
+              <label className="label">
+                Environment
+                <InfoTip content="Purely a visual tag: dev/staging/prod. Prod profiles get a bold red banner and a confirmation dialog before each query." />
+              </label>
               <Select
                 value={form.envTag}
                 onChange={(e) => setForm({ ...form, envTag: e.target.value as EnvTag })}
@@ -906,11 +919,17 @@ function FirestoreFields({
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className="label">Scan cap (max docs per scan)</label>
+          <label className="label">
+            Scan cap (max docs per scan)
+            <InfoTip content="Safety ceiling on how many documents the executor will stream in one run. Raise for large exports; lower to protect quota." />
+          </label>
           <Input value={form.scanCap} onChange={(e) => setForm({ ...form, scanCap: e.target.value })} />
         </div>
         <div>
-          <label className="label">Schema sample size</label>
+          <label className="label">
+            Schema sample size
+            <InfoTip content="Number of documents sampled to infer the collection's field types. Higher = more accurate; slower to refresh." />
+          </label>
           <Input value={form.sampleSize} onChange={(e) => setForm({ ...form, sampleSize: e.target.value })} />
         </div>
       </div>
@@ -1744,6 +1763,48 @@ function ProbeActionButtons({
 }
 
 /**
+ * Parses a Firebase Web config snippet (JSON object, or the JS object-literal
+ * form copy-pasted from the Firebase console) and extracts `projectId` as a
+ * partial Firestore profile. Handles both:
+ *
+ *   { "projectId": "my-proj", "apiKey": "…" }
+ *
+ * and the console-style:
+ *
+ *   const firebaseConfig = { projectId: "my-proj", … };
+ *
+ * Returns null when the input doesn't look like a Firebase config.
+ */
+export function parseFirebaseConfig(raw: string): Partial<FormState> | null {
+  const trimmed = raw.trim();
+  if (!/projectId/i.test(trimmed)) return null;
+
+  // Isolate the {...} object literal if wrapped in assignment / export syntax.
+  const braceStart = trimmed.indexOf('{');
+  const braceEnd = trimmed.lastIndexOf('}');
+  if (braceStart === -1 || braceEnd === -1 || braceEnd <= braceStart) return null;
+  const inner = trimmed.slice(braceStart, braceEnd + 1);
+
+  // Try strict JSON first, then fall back to a safer regex extraction of
+  // just the projectId field to avoid eval-ing attacker-supplied input.
+  let projectId: string | undefined;
+  try {
+    const parsed = JSON.parse(inner) as Record<string, unknown>;
+    if (typeof parsed.projectId === 'string') projectId = parsed.projectId;
+  } catch {
+    const m = inner.match(/projectId\s*:\s*["']([^"']+)["']/);
+    if (m) projectId = m[1];
+  }
+  if (!projectId) return null;
+
+  return {
+    engine: 'firestore',
+    kind: 'live',
+    projectId,
+  };
+}
+
+/**
  * Parses a connection string (postgres://, mysql://, mssql://) into FormState
  * partial overrides. Returns null when the string can't be parsed.
  */
@@ -1801,17 +1862,29 @@ function QuickConnectInput({
 }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
+  const [parsedAs, setParsedAs] = useState<'sql' | 'firebase' | null>(null);
 
   function handleChange(raw: string) {
     setValue(raw);
     setError('');
+    setParsedAs(null);
     if (!raw.trim()) return;
-    const result = parseConnectionString(raw, emptyForm);
-    if (result) {
-      onParsed(result);
-      setError('');
-    } else if (raw.includes('://')) {
-      setError('Could not parse. Supported: postgres://, mysql://, mssql://');
+    const sql = parseConnectionString(raw, emptyForm);
+    if (sql) {
+      onParsed(sql);
+      setParsedAs('sql');
+      return;
+    }
+    const firebase = parseFirebaseConfig(raw);
+    if (firebase) {
+      onParsed(firebase);
+      setParsedAs('firebase');
+      return;
+    }
+    if (raw.includes('://') || /projectId/i.test(raw)) {
+      setError(
+        'Could not parse. Supported: postgres://, mysql://, mssql://, or a Firebase Web config snippet.',
+      );
     }
   }
 
@@ -1819,19 +1892,22 @@ function QuickConnectInput({
     <div className="rounded-md border border-dashed border-border bg-secondary/30 p-3">
       <label className="label mb-1 flex items-center gap-1.5">
         <Link2 size={12} className="text-muted-foreground" />
-        Quick Connect — paste a connection string
+        Quick Connect — paste a connection string or Firebase config
       </label>
-      <Input
+      <Textarea
         value={value}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder="postgres://user:pass@host:5432/mydb"
+        placeholder='postgres://user:pass@host:5432/mydb  —or—  { "projectId": "my-proj", "apiKey": "…" }'
+        rows={2}
         disabled={disabled}
         className="font-mono text-xs"
       />
       {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
-      {!error && value && (
+      {!error && parsedAs && (
         <p className="mt-1 text-[11px] text-green-600 dark:text-green-400">
-          Parsed — fields below have been filled in.
+          {parsedAs === 'firebase'
+            ? 'Parsed Firebase config — project ID filled in. Drop your service-account JSON below.'
+            : 'Parsed connection string — fields below have been filled in.'}
         </p>
       )}
     </div>

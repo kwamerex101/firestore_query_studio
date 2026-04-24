@@ -8,6 +8,7 @@ const HistoryPage = lazy(() => import('./HistoryPage').then((m) => ({ default: m
 import { EnvBadge, EngineBadge } from '../components/ui/badge';
 import { WebAuthBanner } from '../components/WebAuthBanner';
 import { PwaInstallBanner } from '../components/PwaInstallBanner';
+import { ConnectionHealth } from '../components/ConnectionHealth';
 import { OnboardingWizard } from './OnboardingWizard';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { cn } from '../lib/utils';
@@ -207,6 +208,7 @@ function EnvStrip() {
       <EnvBadge envTag={activeProfile.envTag} />
       <EngineBadge engine={activeProfile.engine} />
       <span className="font-medium">{activeProfile.name}</span>
+      <ConnectionHealth profileId={activeProfile.id} />
       {activeProfile.engine === 'postgres' ? (
         <>
           <span className="text-muted-foreground">
