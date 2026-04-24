@@ -204,6 +204,7 @@ export type FqsApi = {
     importServiceAccount(
       req: IpcRequest<typeof IpcChannels.dialogImportServiceAccount>,
     ): Promise<IpcResponse<typeof IpcChannels.dialogImportServiceAccount>>;
+    pickDataFile(): Promise<IpcResponse<typeof IpcChannels.dialogPickDataFile>>;
   };
 };
 
@@ -222,6 +223,8 @@ export interface TransportCapabilities {
   readonly mssqlProfiles: boolean;
   /** Desktop supports Google BigQuery via `@google-cloud/bigquery`; web cannot. */
   readonly bigQueryProfiles: boolean;
+  /** Desktop supports importing CSV/XLSX files into a local SQLite profile; web cannot. */
+  readonly fileProfiles: boolean;
   /** Desktop supports Cursor CLI as a planner backend; web cannot. */
   readonly cursorCli: boolean;
   /** Web uses IndexedDB with a device-scoped key, which is weaker than the OS keychain. */

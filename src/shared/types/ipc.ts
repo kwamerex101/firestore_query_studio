@@ -70,6 +70,7 @@ export const IpcChannels = {
   dialogPickServiceAccount: 'dialog.pickServiceAccount',
   dialogValidateServiceAccount: 'dialog.validateServiceAccount',
   dialogImportServiceAccount: 'dialog.importServiceAccount',
+  dialogPickDataFile: 'dialog.pickDataFile',
   // Streaming run (SQL + Firestore) + cancel. Batch events are pushed by
   // main as `stream.batch.<runId>` / `stream.done.<runId>` /
   // `stream.error.<runId>`; the renderer subscribes via the preload
@@ -596,6 +597,23 @@ export const PickServiceAccountResult = z.discriminatedUnion('canceled', [
   PickServiceAccountPicked,
 ]);
 export type PickServiceAccountResult = z.infer<typeof PickServiceAccountResult>;
+
+/**
+ * Result of the native "pick a CSV/XLSX" dialog used by the file-backed
+ * profile creation flow. The main process additionally tells the renderer
+ * which kind it detected so the form can preselect.
+ */
+export const PickDataFileCanceled = z.object({ canceled: z.literal(true) });
+export const PickDataFilePicked = z.object({
+  canceled: z.literal(false),
+  path: z.string().min(1),
+  kind: z.enum(['csv', 'xlsx']),
+});
+export const PickDataFileResult = z.discriminatedUnion('canceled', [
+  PickDataFileCanceled,
+  PickDataFilePicked,
+]);
+export type PickDataFileResult = z.infer<typeof PickDataFileResult>;
 
 export const ValidateServiceAccountRequest = z.object({
   path: z.string().min(1),

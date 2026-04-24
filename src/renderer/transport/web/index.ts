@@ -238,6 +238,7 @@ const api: FqsApi = {
         'Service account imports are only available in the desktop app. Use Firebase Web config + Firebase Auth in the browser.',
       );
     },
+    pickDataFile: async () => ({ canceled: true as const }),
   },
 };
 

@@ -15,6 +15,7 @@ export const Engine = z.enum([
   'mysql',
   'mssql',
   'bigquery',
+  'file',
 ]);
 export type Engine = z.infer<typeof Engine>;
 
@@ -208,6 +209,45 @@ export const BigQueryProfile = z.object({
 export type BigQueryProfile = z.infer<typeof BigQueryProfile>;
 
 /**
+ * CSV / XLSX-backed profile.
+ *
+ * On create we parse the uploaded file into a per-profile SQLite database
+ * living in the app's user-data dir. Each sheet (XLSX) or the one CSV
+ * becomes a SQLite table. Queries are then just regular SQL over that
+ * SQLite file — the profile implements the existing `SqlDriver`
+ * interface, so the NL→SQL planner + execution UI work unchanged.
+ */
+export const FileProfileKind = z.enum(['csv', 'xlsx']);
+export type FileProfileKind = z.infer<typeof FileProfileKind>;
+
+export const FileProfile = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  engine: z.literal('file'),
+  envTag: EnvTag,
+  /** Source file kind — used for re-parsing on refresh. */
+  kind: FileProfileKind,
+  /** Absolute path to the source file at import time. Kept for "refresh" and display. */
+  sourcePath: z.string().min(1),
+  /** Friendly source filename (derived from sourcePath; stored for display). */
+  sourceName: z.string().min(1),
+  /** Absolute path to the SQLite database we materialized for this profile. */
+  sqlitePath: z.string().min(1),
+  /** Names of tables created inside the SQLite file. */
+  tables: z.array(z.string()).default([]),
+  /** Size of the imported source file in bytes. */
+  sizeBytes: z.number().int().nonnegative().default(0),
+  /** Row totals per table (approximate; captured at import time). */
+  rowCounts: z.record(z.number().int().nonnegative()).default({}),
+  queryTimeoutMs: z.number().int().positive().min(1_000).max(600_000).default(30_000),
+  defaultLimit: z.number().int().positive().max(10_000_000).default(500),
+  maxMemoryMb: z.number().int().positive().max(8_192).default(512),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type FileProfile = z.infer<typeof FileProfile>;
+
+/**
  * Top-level profile union. Using `z.union` (not `z.discriminatedUnion`) so
  * that legacy on-disk profiles without the `engine` field still parse via
  * the Firestore variants' `.default('firestore')`.
@@ -219,6 +259,7 @@ export const Profile = z.union([
   MysqlProfile,
   MssqlProfile,
   BigQueryProfile,
+  FileProfile,
 ]);
 export type Profile = z.infer<typeof Profile>;
 export type LiveProfile = z.infer<typeof LiveProfile>;
@@ -318,6 +359,23 @@ export const MssqlProfileInput = MssqlProfile
   });
 export type MssqlProfileInput = z.infer<typeof MssqlProfileInput>;
 
+/**
+ * Input shape for creating a file-backed profile. The renderer only knows
+ * the source path (from an Electron open dialog) + kind; the main process
+ * handles the actual parse-to-SQLite step and fills in the derived fields
+ * before persisting the Profile.
+ */
+export const FileProfileInput = z.object({
+  name: z.string().min(1),
+  engine: z.literal('file'),
+  envTag: EnvTag,
+  kind: FileProfileKind,
+  sourcePath: z.string().min(1),
+  queryTimeoutMs: z.number().int().positive().min(1_000).max(600_000).optional(),
+  defaultLimit: z.number().int().positive().max(10_000_000).optional(),
+});
+export type FileProfileInput = z.infer<typeof FileProfileInput>;
+
 export const BigQueryProfileInput = BigQueryProfile
   .omit({
     id: true,
@@ -341,6 +399,7 @@ export const ProfileInput = z.union([
   MysqlProfileInput,
   MssqlProfileInput,
   BigQueryProfileInput,
+  FileProfileInput,
 ]);
 export type ProfileInput = z.infer<typeof ProfileInput>;
 
@@ -482,6 +541,9 @@ export function isMssqlProfile(p: Profile): p is MssqlProfile {
 export function isBigQueryProfile(p: Profile): p is BigQueryProfile {
   return p.engine === 'bigquery';
 }
+export function isFileProfile(p: Profile): p is FileProfile {
+  return p.engine === 'file';
+}
 
 /**
  * A "SQL-ish" profile — any engine that speaks a relational dialect via
@@ -492,19 +554,22 @@ export type SqlProfile =
   | PostgresProfile
   | MysqlProfile
   | MssqlProfile
-  | BigQueryProfile;
+  | BigQueryProfile
+  | FileProfile;
 export function isSqlProfile(p: Profile): p is SqlProfile {
   return (
     p.engine === 'postgres' ||
     p.engine === 'mysql' ||
     p.engine === 'mssql' ||
-    p.engine === 'bigquery'
+    p.engine === 'bigquery' ||
+    p.engine === 'file'
   );
 }
 
 /**
  * Dialect string used by the shared SQL planner / executor. Equivalent to
  * `SqlProfile['engine']` but exported separately so shared/renderer code
- * can import it without dragging the profile schemas along.
+ * can import it without dragging the profile schemas along. File-backed
+ * profiles use the `sqlite` dialect under the hood.
  */
-export type SqlDialect = 'postgres' | 'mysql' | 'mssql' | 'bigquery';
+export type SqlDialect = 'postgres' | 'mysql' | 'mssql' | 'bigquery' | 'sqlite';

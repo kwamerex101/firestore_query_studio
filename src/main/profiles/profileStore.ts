@@ -13,7 +13,10 @@ import {
   MysqlProfile,
   MssqlProfile,
   BigQueryProfile,
+  FileProfile,
 } from '@shared/types/profile';
+import { basename } from 'node:path';
+import { importFileToSqlite } from '../drivers/fileImport';
 import { clearProfileSecret, setProfileSecret } from './secrets';
 import { removeImportedServiceAccount } from '../dialogs/serviceAccount';
 
@@ -147,6 +150,32 @@ export async function createProfile(input: ProfileInput): Promise<Profile> {
         parsed.instanceName && parsed.instanceName.length > 0
           ? parsed.instanceName
           : undefined,
+      queryTimeoutMs: parsed.queryTimeoutMs ?? 30_000,
+      defaultLimit: parsed.defaultLimit ?? 500,
+      createdAt: now,
+      updatedAt: now,
+    });
+  } else if ('engine' in parsed && parsed.engine === 'file') {
+    if (!existsSync(parsed.sourcePath)) {
+      throw new Error(`Source file not found: ${parsed.sourcePath}`);
+    }
+    const importResult = await importFileToSqlite({
+      profileId: id,
+      kind: parsed.kind,
+      sourcePath: parsed.sourcePath,
+    });
+    profile = FileProfile.parse({
+      id,
+      engine: 'file',
+      name: parsed.name,
+      envTag: parsed.envTag,
+      kind: parsed.kind,
+      sourcePath: parsed.sourcePath,
+      sourceName: basename(parsed.sourcePath),
+      sqlitePath: importResult.sqlitePath,
+      tables: importResult.tables,
+      sizeBytes: importResult.sizeBytes,
+      rowCounts: importResult.rowCounts,
       queryTimeoutMs: parsed.queryTimeoutMs ?? 30_000,
       defaultLimit: parsed.defaultLimit ?? 500,
       createdAt: now,
@@ -300,6 +329,16 @@ export async function updateProfile(id: string, update: ProfileUpdate): Promise<
       updatedAt: now,
     });
     all[idx] = next;
+  } else if (current.engine === 'file') {
+    const next = FileProfile.parse({
+      ...current,
+      name: parsed.name ?? current.name,
+      envTag: parsed.envTag ?? current.envTag,
+      queryTimeoutMs: parsed.queryTimeoutMs ?? current.queryTimeoutMs,
+      defaultLimit: parsed.defaultLimit ?? current.defaultLimit,
+      updatedAt: now,
+    });
+    all[idx] = next;
   } else if (current.engine === 'bigquery') {
     const next = BigQueryProfile.parse({
       ...current,
@@ -372,6 +411,14 @@ export async function deleteProfile(id: string): Promise<void> {
       await removeImportedServiceAccount(target.serviceAccountPath);
     } catch {
       // Don't block deletion on cleanup failures; the profile is already gone.
+    }
+  }
+  if (target && target.engine === 'file') {
+    // Remove the materialized SQLite file so stale imports don't linger.
+    try {
+      await fs.unlink(target.sqlitePath);
+    } catch {
+      /* ignore */
     }
   }
   const active = await getActiveProfileId();

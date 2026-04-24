@@ -11,6 +11,10 @@ export const capabilities: TransportCapabilities = {
   // browser can't resolve file paths reliably and bundle size wants to stay
   // lean. Desktop-only.
   bigQueryProfiles: false,
+  // File-backed profiles need native SQLite + absolute filesystem paths;
+  // both are unavailable to the browser. Import your CSV/XLSX in the
+  // desktop app instead.
+  fileProfiles: false,
   // The Cursor CLI is a local binary spawned via `node:child_process`.
   // Browsers obviously cannot do this; hide the Cursor provider picker.
   cursorCli: false,

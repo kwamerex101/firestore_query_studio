@@ -87,6 +87,10 @@ export type FormState = {
   // BigQuery-only
   bqDefaultDataset: string;
   bqLocation: string;
+
+  // File-backed only
+  fileSourcePath: string;
+  fileKind: 'csv' | 'xlsx';
 };
 
 export const emptyForm: FormState = {
@@ -120,6 +124,9 @@ export const emptyForm: FormState = {
 
   bqDefaultDataset: '',
   bqLocation: '',
+
+  fileSourcePath: '',
+  fileKind: 'csv',
 };
 
 export function defaultPortFor(engine: Engine): string {
@@ -203,6 +210,17 @@ export function buildProfileInputFromForm(form: FormState): ProfileInput {
       defaultDataset: form.bqDefaultDataset.trim(),
       location: form.bqLocation.trim(),
       queryTimeoutMs: Number(form.queryTimeoutMs) || 60_000,
+      defaultLimit: Number(form.defaultLimit) || 500,
+    };
+  }
+  if (form.engine === 'file') {
+    return {
+      engine: 'file' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      kind: form.fileKind,
+      sourcePath: form.fileSourcePath.trim(),
+      queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
       defaultLimit: Number(form.defaultLimit) || 500,
     };
   }
@@ -328,6 +346,17 @@ export function ProfilesPage() {
         queryTimeoutMs: String(p.queryTimeoutMs),
         defaultLimit: String(p.defaultLimit),
       });
+    } else if (p.engine === 'file') {
+      setForm({
+        ...emptyForm,
+        name: p.name,
+        engine: 'file',
+        envTag: p.envTag,
+        fileKind: p.kind,
+        fileSourcePath: p.sourcePath,
+        queryTimeoutMs: String(p.queryTimeoutMs),
+        defaultLimit: String(p.defaultLimit),
+      });
     } else {
       setForm({
         ...emptyForm,
@@ -430,6 +459,19 @@ export function ProfilesPage() {
               defaultDataset: form.bqDefaultDataset.trim(),
               location: form.bqLocation.trim(),
               queryTimeoutMs: Number(form.queryTimeoutMs) || 60_000,
+              defaultLimit: Number(form.defaultLimit) || 500,
+            },
+          });
+        } else if (editing.engine === 'file') {
+          // File-backed profiles are immutable past the source import — we
+          // only allow metadata edits (name / env / defaults). Re-importing
+          // would require deleting + recreating the profile.
+          await ipc.profiles.update({
+            id: editing.id,
+            update: {
+              name,
+              envTag: form.envTag,
+              queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
               defaultLimit: Number(form.defaultLimit) || 500,
             },
           });
@@ -744,6 +786,9 @@ export function ProfilesPage() {
                 {capabilities.bigQueryProfiles ? (
                   <option value="bigquery">Google BigQuery</option>
                 ) : null}
+                {capabilities.fileProfiles ? (
+                  <option value="file">CSV / Excel file</option>
+                ) : null}
               </Select>
             </div>
             <div>
@@ -793,8 +838,10 @@ export function ProfilesPage() {
               showPassword={showPassword}
               setShowPassword={setShowPassword}
             />
-          ) : (
+          ) : form.engine === 'bigquery' ? (
             <BigQueryFields form={form} setForm={setForm} />
+          ) : (
+            <FileFields form={form} setForm={setForm} editing={editing} />
           )}
         </div>
       </Dialog>
@@ -903,6 +950,26 @@ function ProfileCardDetails({ profile }: { profile: Profile }) {
         <div>
           timeout <span className="font-mono">{profile.queryTimeoutMs}ms</span> · limit{' '}
           <span className="font-mono">{profile.defaultLimit}</span>
+        </div>
+      </div>
+    );
+  }
+  if (profile.engine === 'file') {
+    const tableCount = profile.tables.length;
+    const totalRows = Object.values(profile.rowCounts).reduce((a, b) => a + b, 0);
+    return (
+      <div className="text-xs text-muted-foreground">
+        <div className="truncate" title={profile.sourcePath}>
+          <span className="font-mono">{profile.sourceName}</span>{' '}
+          <span className="uppercase opacity-70">· {profile.kind}</span>
+        </div>
+        <div>
+          {tableCount} table{tableCount === 1 ? '' : 's'} · {totalRows.toLocaleString()} row
+          {totalRows === 1 ? '' : 's'}
+          {profile.sizeBytes > 0 ? ` · ${Math.ceil(profile.sizeBytes / 1024)} KB` : ''}
+        </div>
+        <div>
+          limit <span className="font-mono">{profile.defaultLimit}</span>
         </div>
       </div>
     );
@@ -1049,7 +1116,7 @@ function SqlConnectionFields({
   userPlaceholder,
 }: SqlFieldsProps & {
   /** Only the networked SQL engines have host/port/user — BigQuery uses service-account auth. */
-  engine: Exclude<SqlDialect, 'bigquery'>;
+  engine: Exclude<SqlDialect, 'bigquery' | 'sqlite'>;
   hostPlaceholder?: string;
   databasePlaceholder?: string;
   userPlaceholder?: string;
@@ -1387,8 +1454,93 @@ function BigQueryFields({
   );
 }
 
+function FileFields({
+  form,
+  setForm,
+  editing,
+}: {
+  form: FormState;
+  setForm: (next: FormState) => void;
+  editing: Profile | null;
+}) {
+  async function pick() {
+    const res = await ipc.dialog.pickDataFile();
+    if (res.canceled) return;
+    setForm({
+      ...form,
+      fileSourcePath: res.path,
+      fileKind: res.kind,
+      // Default the profile name to the filename when the user hasn't typed one.
+      name: form.name.trim() ? form.name : basenameFor(res.path),
+    });
+  }
+  const isEditing = !!editing && editing.engine === 'file';
+  return (
+    <>
+      {isEditing ? (
+        <HelpNotice>
+          The file has already been imported into SQLite. You can rename this
+          profile, change the env tag, or tweak the default limit — re-importing
+          the file requires deleting this profile and creating a new one.
+        </HelpNotice>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="label">Source file</label>
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={form.fileSourcePath}
+                placeholder="Click Browse… to pick a CSV / XLSX"
+                className="font-mono text-xs"
+              />
+              <Button type="button" onClick={pick}>
+                Browse…
+              </Button>
+            </div>
+            <HelpNotice>
+              CSV becomes one SQLite table named after the filename. XLSX becomes
+              one table per sheet. Columns are typed via a first-rows sample:
+              <span className="font-mono"> INTEGER</span>,
+              <span className="font-mono"> REAL</span>, or
+              <span className="font-mono"> TEXT</span>.
+            </HelpNotice>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label">Kind</label>
+              <Select
+                value={form.fileKind}
+                onChange={(e) =>
+                  setForm({ ...form, fileKind: e.target.value as 'csv' | 'xlsx' })
+                }
+              >
+                <option value="csv">CSV / TSV</option>
+                <option value="xlsx">Excel (XLSX)</option>
+              </Select>
+            </div>
+            <div>
+              <label className="label">Default row limit</label>
+              <Input
+                value={form.defaultLimit}
+                onChange={(e) => setForm({ ...form, defaultLimit: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function basenameFor(path: string): string {
+  const segs = path.split(/[\\/]/);
+  const last = segs[segs.length - 1] ?? path;
+  return last.replace(/\.[^.]+$/, '');
+}
+
 /**
- * Prominent “Test connection” control: uses the default `btn` surface (border +
+ * Prominent "Test connection" control: uses the default `btn` surface (border +
  * background + hover) so it reads as an action, not link text. Status appears
  * in `TestConnectionResultCard` below, not inline.
  */
@@ -1624,7 +1776,7 @@ type ProbeStatus = 'idle' | 'loading' | 'ok' | 'err';
  */
 function buildProbeDraft(
   form: FormState,
-  engine: Exclude<SqlDialect, 'bigquery'>,
+  engine: Exclude<SqlDialect, 'bigquery' | 'sqlite'>,
   editing: Profile | null,
 ): SqlProbeDraft | null {
   const host = form.sqlHost.trim();
@@ -1660,7 +1812,7 @@ function buildProbeDraft(
 
 function probeRequestFor(
   form: FormState,
-  engine: Exclude<SqlDialect, 'bigquery'>,
+  engine: Exclude<SqlDialect, 'bigquery' | 'sqlite'>,
   editing: Profile | null,
 ): { profileId?: string; draft?: SqlProbeDraft } | null {
   const draft = buildProbeDraft(form, engine, editing);
@@ -1691,7 +1843,7 @@ function DatabaseCombobox({
   form: FormState;
   setForm: (next: FormState) => void;
   editing: Profile | null;
-  engine: Exclude<SqlDialect, 'bigquery'>;
+  engine: Exclude<SqlDialect, 'bigquery' | 'sqlite'>;
   placeholder?: string;
 }) {
   const [status, setStatus] = useState<ProbeStatus>('idle');
@@ -1796,7 +1948,7 @@ function SchemaCombobox({
   form: FormState;
   setForm: (next: FormState) => void;
   editing: Profile | null;
-  engine: Exclude<SqlDialect, 'bigquery'>;
+  engine: Exclude<SqlDialect, 'bigquery' | 'sqlite'>;
   placeholder?: string;
 }) {
   const [status, setStatus] = useState<ProbeStatus>('idle');

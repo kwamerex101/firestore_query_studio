@@ -21,6 +21,13 @@ const DIALECT_NOTES: Record<SqlDialect, string> = {
 - String literals prefix with \`N\` for NVARCHAR: \`N'hello'\`.
 - Case-insensitive compare depends on the column collation; prefer \`UPPER(col) = UPPER(@value)\` when portability matters.
 - Date helpers: \`SYSUTCDATETIME()\`, \`DATEADD(day, -7, SYSUTCDATETIME())\`, \`CAST(x AS DATE)\`.`,
+  sqlite: `Dialect: SQLite (file-backed profile).
+- Identifiers are quoted with double quotes: \`SELECT "email" FROM "users"\`.
+- Row limits use \`LIMIT N\`. Boolean literals don't exist — use \`1\`/\`0\`.
+- String functions: \`LIKE\` is case-insensitive for ASCII by default; use \`LOWER(col) LIKE '%x%'\` for anything non-ASCII.
+- Date/time: \`datetime('now')\`, \`date(ts)\`, \`strftime('%Y-%m', ts)\`.
+- The schema is imported from a CSV/XLSX file; columns default to TEXT affinity when types couldn't be inferred, so compare strings with \`CAST(col AS INTEGER)\` or similar where needed.
+- Only a single database is attached; schema-qualified names (\`main.table\`) work but are usually redundant.`,
   bigquery: `Dialect: Google BigQuery (GoogleSQL).
 - Fully-qualify tables as \`project.dataset.table\` (backticks required when identifiers contain hyphens).
 - Row limits use \`LIMIT N\`. Boolean literals are \`TRUE\` / \`FALSE\`.

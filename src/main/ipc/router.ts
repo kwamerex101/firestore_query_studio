@@ -86,6 +86,7 @@ import {
   pickServiceAccount,
   validateServiceAccount,
 } from '../dialogs/serviceAccount';
+import { pickDataFile } from '../dialogs/dataFile';
 
 type Handler<C extends IpcChannel> = (
   req: z.infer<(typeof ipcApi)[C]['request']>,
@@ -161,7 +162,8 @@ async function resolveProbeCfg(args: {
     if (
       saved &&
       isSqlProfile(saved) &&
-      saved.engine !== 'bigquery'
+      saved.engine !== 'bigquery' &&
+      saved.engine !== 'file'
     ) {
       engine = engine ?? (saved.engine as SqlDialect);
       host = host ?? saved.host;
@@ -894,6 +896,10 @@ export function registerIpcHandlers(): void {
 
   register(IpcChannels.dialogImportServiceAccount, async (input) => {
     return importServiceAccount(input);
+  });
+
+  register(IpcChannels.dialogPickDataFile, async () => {
+    return pickDataFile();
   });
 
   registerWithSender(IpcChannels.sqlStreamStart, async (input, sender) => {

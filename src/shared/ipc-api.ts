@@ -51,6 +51,7 @@ import {
   SqlSampleTableRequest,
   SqlSampleTableResult,
   PickServiceAccountResult,
+  PickDataFileResult,
   ValidateServiceAccountRequest,
   ValidateServiceAccountResult,
   ImportServiceAccountRequest,
@@ -284,6 +285,10 @@ export const ipcApi = {
   [IpcChannels.dialogImportServiceAccount]: {
     request: ImportServiceAccountRequest,
     response: ImportServiceAccountResult,
+  },
+  [IpcChannels.dialogPickDataFile]: {
+    request: Void,
+    response: PickDataFileResult,
   },
   [IpcChannels.sqlStreamStart]: {
     request: SqlStreamStartRequest,

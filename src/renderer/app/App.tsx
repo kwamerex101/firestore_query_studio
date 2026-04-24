@@ -269,6 +269,15 @@ function EnvStrip() {
             · {activeProfile.serviceAccountPath ? 'service account' : 'ADC'}
           </span>
         </>
+      ) : activeProfile.engine === 'file' ? (
+        <>
+          <span className="text-muted-foreground">
+            · <span className="font-mono">{activeProfile.sourceName}</span>
+          </span>
+          <span className="text-muted-foreground">
+            · {activeProfile.tables.length} table{activeProfile.tables.length === 1 ? '' : 's'}
+          </span>
+        </>
       ) : (
         <>
           <span className="text-muted-foreground">· {activeProfile.projectId}</span>

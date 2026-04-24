@@ -375,6 +375,7 @@ const engineMeta: Record<Engine, { label: string; icon: LucideIcon }> = {
   mysql: { label: 'MySQL', icon: Database },
   mssql: { label: 'SQL Server', icon: Database },
   bigquery: { label: 'BigQuery', icon: Database },
+  file: { label: 'File', icon: Database },
 };
 
 function getDatabaseName(profile: Profile): string {
@@ -387,6 +388,7 @@ function getDatabaseName(profile: Profile): string {
       ? `${profile.projectId}.${profile.defaultDataset}`
       : profile.projectId;
   }
+  if (profile.engine === 'file') return profile.sourceName;
   // Exhaustiveness guard — adding a new engine variant will fail here.
   const _exhaustive: never = profile;
   return (_exhaustive as { name?: string }).name ?? '';

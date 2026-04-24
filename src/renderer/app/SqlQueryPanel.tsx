@@ -22,7 +22,7 @@ import { maybeNotifySlowQuery } from '../lib/slackNotify';
 import { cn } from '../lib/utils';
 
 interface SqlQueryPanelProps {
-  profile: Profile & { engine: 'postgres' | 'mysql' | 'mssql' | 'bigquery' };
+  profile: Profile & { engine: 'postgres' | 'mysql' | 'mssql' | 'bigquery' | 'file' };
   hasLlmConfigured: boolean;
 }
 
@@ -140,11 +140,16 @@ export function SqlQueryPanel({ profile, hasLlmConfigured }: SqlQueryPanelProps)
         });
       }
       const runLimit = limit ?? effectivePlan?.limit ?? profile.defaultLimit;
+      // File-backed profiles are SQLite under the hood. The stored plan's
+      // dialect needs to match the runtime dialect (`sqlite`) so rerunning
+      // from history pulls the right planner prompt.
+      const dialectForHistory =
+        profile.engine === 'file' ? 'sqlite' : profile.engine;
       const sqlPlanForHistory: SqlPlan = effectivePlan
         ? { ...effectivePlan, sql, limit: runLimit }
         : {
             mode: 'sql',
-            dialect: profile.engine,
+            dialect: dialectForHistory,
             sql,
             rationale: 'Run without a generated plan in this session.',
             limit: runLimit,
@@ -181,6 +186,10 @@ export function SqlQueryPanel({ profile, hasLlmConfigured }: SqlQueryPanelProps)
         return 'MySQL';
       case 'mssql':
         return 'SQL Server';
+      case 'bigquery':
+        return 'BigQuery';
+      case 'file':
+        return 'SQLite (file)';
     }
   }, [profile.engine]);
 

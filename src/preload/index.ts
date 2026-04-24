@@ -149,6 +149,7 @@ const api = {
       invoke(IpcChannels.dialogValidateServiceAccount, input),
     importServiceAccount: (input: unknown) =>
       invoke(IpcChannels.dialogImportServiceAccount, input),
+    pickDataFile: () => invoke(IpcChannels.dialogPickDataFile, undefined),
   },
   menu: {
     /**
