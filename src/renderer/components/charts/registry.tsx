@@ -100,6 +100,53 @@ function ChartCard({
   );
 }
 
+/**
+ * Rendered in place of a chart when the spec's data is empty or its
+ * axis fields don't match the keys actually present on `spec.data`.
+ * Without this, recharts silently renders a blank axis-and-gridlines
+ * frame and the user can't tell whether the chart succeeded or failed.
+ */
+function ChartDataError({ message }: { message: string }) {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-sm bg-background/40 p-3 text-center">
+      <span className="text-[11px] font-semibold text-muted-foreground">
+        Chart has no data
+      </span>
+      <span className="text-[10px] text-muted-foreground/80">{message}</span>
+    </div>
+  );
+}
+
+/**
+ * Validate a Cartesian spec (bar/line/area/scatter) before recharts gets
+ * a chance to render a silent empty chart. Returns an error message when
+ * something's off, or `null` when the spec is renderable.
+ */
+function cartesianDataError(
+  data: ReadonlyArray<Record<string, unknown>>,
+  xField: string,
+  yField: string,
+): string | null {
+  if (!Array.isArray(data) || data.length === 0) {
+    return 'The model returned an empty data array for this chart.';
+  }
+  const first = data[0] ?? {};
+  if (!(xField in first)) {
+    return `Missing x-axis field "${xField}" on the data rows.`;
+  }
+  if (!(yField in first)) {
+    return `Missing y-axis field "${yField}" on the data rows.`;
+  }
+  const yNumeric = data.some((row) => {
+    const v = row[yField];
+    return typeof v === 'number' && Number.isFinite(v);
+  });
+  if (!yNumeric) {
+    return `The y-axis field "${yField}" has no numeric values.`;
+  }
+  return null;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Value formatting                                                   */
 /* ------------------------------------------------------------------ */
@@ -184,6 +231,14 @@ export function KpiCard({ spec }: { spec: KpiSpec }) {
 
 export function BarChartCard({ spec }: { spec: BarSpec }) {
   const horizontal = spec.orientation === 'horizontal';
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        <ChartDataError message={err} />
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
       <ResponsiveContainer width="100%" height="100%">
@@ -247,6 +302,14 @@ export function BarChartCard({ spec }: { spec: BarSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function LineChartCard({ spec }: { spec: LineSpec }) {
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        <ChartDataError message={err} />
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
       <ResponsiveContainer width="100%" height="100%">
@@ -287,6 +350,14 @@ export function LineChartCard({ spec }: { spec: LineSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function AreaChartCard({ spec }: { spec: AreaSpec }) {
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        <ChartDataError message={err} />
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
       <ResponsiveContainer width="100%" height="100%">
@@ -332,6 +403,14 @@ export function AreaChartCard({ spec }: { spec: AreaSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function PieChartCard({ spec }: { spec: PieSpec }) {
+  const err = cartesianDataError(spec.data, spec.labelField, spec.valueField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        <ChartDataError message={err} />
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
       <ResponsiveContainer width="100%" height="100%">
@@ -366,6 +445,13 @@ export function PieChartCard({ spec }: { spec: PieSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function HistogramChartCard({ spec }: { spec: HistogramSpec }) {
+  if (!Array.isArray(spec.bins) || spec.bins.length === 0) {
+    return (
+      <ChartCard title={spec.title} hint={`field: ${spec.field}`}>
+        <ChartDataError message="The model returned no histogram bins." />
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title} hint={`field: ${spec.field}`}>
       <ResponsiveContainer width="100%" height="100%">
@@ -399,6 +485,14 @@ export function HistogramChartCard({ spec }: { spec: HistogramSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function ScatterChartCard({ spec }: { spec: ScatterSpec }) {
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        <ChartDataError message={err} />
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
       <ResponsiveContainer width="100%" height="100%">
