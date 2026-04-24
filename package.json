@@ -36,6 +36,8 @@
     "electron-updater": "^6.8.3",
     "firebase": "^12.12.1",
     "firebase-admin": "^13.1.0",
+    "google-auth-library": "^10.6.2",
+    "googleapis": "^171.4.0",
     "idb": "^8.0.3",
     "keytar": "^7.9.0",
     "lucide-react": "^0.469.0",

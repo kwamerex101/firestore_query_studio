@@ -7,6 +7,7 @@ import {
   LlmProvider,
   CursorSettings,
   ClaudeSettings,
+  GoogleSheetsSettings,
   SslMode,
 } from './profile';
 import { CollectionSchema } from './schema';
@@ -38,6 +39,12 @@ export const IpcChannels = {
   claudeSet: 'claude.set',
   claudeListModels: 'claude.listModels',
   claudeTest: 'claude.test',
+  sheetsGet: 'sheets.get',
+  sheetsSet: 'sheets.set',
+  sheetsSignIn: 'sheets.signIn',
+  sheetsSignOut: 'sheets.signOut',
+  sheetsExportCreate: 'sheets.exportCreate',
+  sheetsExportAppend: 'sheets.exportAppend',
   providerGet: 'provider.get',
   providerSet: 'provider.set',
   schemaSample: 'schema.sample',
@@ -297,6 +304,71 @@ export const ProviderResult = z.object({
   provider: LlmProvider,
 });
 export type ProviderResult = z.infer<typeof ProviderResult>;
+
+/**
+ * Google Sheets state exposed to the renderer. `connected` flips to true
+ * once the OAuth dance has produced a refresh token. `clientId` comes
+ * back so the Settings form can pre-populate; the secret is withheld
+ * by default (we only return `hasSecret`) to keep it out of devtools.
+ */
+export const SheetsStateResult = z.object({
+  hasClient: z.boolean(),
+  clientId: z.string().optional(),
+  hasSecret: z.boolean(),
+  connected: z.boolean(),
+  scope: z.string().nullable().optional(),
+});
+export type SheetsStateResult = z.infer<typeof SheetsStateResult>;
+
+export const SheetsSignInOutcome = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), scope: z.string().nullable() }),
+  z.object({ ok: z.literal(false), code: z.string(), message: z.string() }),
+]);
+export type SheetsSignInOutcome = z.infer<typeof SheetsSignInOutcome>;
+
+/**
+ * Matrix of cell values — primitives only so the payload serializes
+ * cleanly over IPC. The caller (renderer) flattens rich objects to
+ * strings before sending; we keep the boundary narrow.
+ */
+const SheetsCellArray = z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]));
+
+export const SheetsExportCreateRequest = z.object({
+  title: z.string().optional(),
+  columns: z.array(z.string()),
+  rows: z.array(SheetsCellArray),
+});
+export type SheetsExportCreateRequest = z.infer<typeof SheetsExportCreateRequest>;
+
+export const SheetsExportAppendRequest = SheetsExportCreateRequest.extend({
+  spreadsheetRef: z.string().min(1),
+  sheetName: z.string().optional(),
+});
+export type SheetsExportAppendRequest = z.infer<typeof SheetsExportAppendRequest>;
+
+export const SheetsExportCreateOutcome = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    spreadsheetId: z.string(),
+    spreadsheetUrl: z.string(),
+    sheetTitle: z.string(),
+    rowCount: z.number().int().nonnegative(),
+  }),
+  z.object({ ok: z.literal(false), code: z.string(), message: z.string() }),
+]);
+export type SheetsExportCreateOutcome = z.infer<typeof SheetsExportCreateOutcome>;
+
+export const SheetsExportAppendOutcome = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    spreadsheetId: z.string(),
+    spreadsheetUrl: z.string(),
+    appendedRange: z.string(),
+    rowCount: z.number().int().nonnegative(),
+  }),
+  z.object({ ok: z.literal(false), code: z.string(), message: z.string() }),
+]);
+export type SheetsExportAppendOutcome = z.infer<typeof SheetsExportAppendOutcome>;
 
 export const HistoryListRequest = z.object({
   limit: z.number().int().positive().max(500).optional(),
@@ -807,6 +879,7 @@ export type {
   LlmProvider,
   CursorSettings,
   ClaudeSettings,
+  GoogleSheetsSettings,
   CollectionSchema,
   QueryPlan,
   RunOutcome,

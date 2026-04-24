@@ -35,6 +35,14 @@ const api = {
     listModels: () => invoke(IpcChannels.claudeListModels, undefined),
     test: (input?: unknown) => invoke(IpcChannels.claudeTest, input),
   },
+  sheets: {
+    get: () => invoke(IpcChannels.sheetsGet, undefined),
+    set: (input: unknown) => invoke(IpcChannels.sheetsSet, input),
+    signIn: () => invoke(IpcChannels.sheetsSignIn, undefined),
+    signOut: () => invoke(IpcChannels.sheetsSignOut, undefined),
+    exportCreate: (input: unknown) => invoke(IpcChannels.sheetsExportCreate, input),
+    exportAppend: (input: unknown) => invoke(IpcChannels.sheetsExportAppend, input),
+  },
   provider: {
     get: () => invoke(IpcChannels.providerGet, undefined),
     set: (input: unknown) => invoke(IpcChannels.providerSet, input),

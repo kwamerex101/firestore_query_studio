@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, useEffect } from 'react';
-import { ChevronDown, Flame, HelpCircle, MessageSquare, Moon, Save, Server, Sparkles, Sun, Terminal } from 'lucide-react';
+import { ChevronDown, Flame, HelpCircle, MessageSquare, Moon, Save, Server, Sheet, Sparkles, Sun, Terminal } from 'lucide-react';
 import { useAppState } from '../state/AppState';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -9,15 +9,17 @@ import { ipc } from '../lib/ipcClient';
 import { cn } from '../lib/utils';
 import { CursorSettingsSection } from './CursorPage';
 import { ClaudeSettingsSection } from './ClaudePage';
+import { SheetsSettingsSection } from './SheetsPage';
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
 
-type SettingsSection = 'llm' | 'cursor' | 'claude' | 'slack' | 'faq';
+type SettingsSection = 'llm' | 'cursor' | 'claude' | 'sheets' | 'slack' | 'faq';
 
 const SECTIONS: Array<{ id: SettingsSection; label: string; icon: React.ReactNode }> = [
   { id: 'llm', label: 'LLM', icon: <Server size={14} /> },
   { id: 'cursor', label: 'Cursor CLI', icon: <Terminal size={14} /> },
   { id: 'claude', label: 'Claude CLI', icon: <Sparkles size={14} /> },
+  { id: 'sheets', label: 'Google Sheets', icon: <Sheet size={14} /> },
   { id: 'slack', label: 'Slack', icon: <MessageSquare size={14} /> },
   { id: 'faq', label: 'FAQ', icon: <HelpCircle size={14} /> },
 ];
@@ -77,6 +79,8 @@ export function SettingsPage() {
             <CursorSettingsSection />
           ) : section === 'claude' ? (
             <ClaudeSettingsSection />
+          ) : section === 'sheets' ? (
+            <SheetsSettingsSection />
           ) : section === 'slack' ? (
             <SlackSettingsSection />
           ) : (

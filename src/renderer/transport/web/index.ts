@@ -119,6 +119,45 @@ const api: FqsApi = {
         'The Claude CLI provider is only available in the desktop app. Use an OpenAI-compatible endpoint in the web build.',
     }),
   },
+  sheets: {
+    // Google Sheets OAuth needs a loopback redirect server; browsers can't
+    // do that. Keep stubs so Settings + Results menus don't crash on web.
+    get: async () => ({
+      hasClient: false,
+      hasSecret: false,
+      connected: false,
+      scope: null,
+    }),
+    set: async () => {
+      throw new Error(
+        'Google Sheets OAuth is only available in the desktop app. Use the "Google Sheets (TSV paste)" shortcut in the web build.',
+      );
+    },
+    signIn: async () => ({
+      ok: false,
+      code: 'UNSUPPORTED',
+      message:
+        'Google Sheets OAuth is only available in the desktop app.',
+    }),
+    signOut: async () => ({
+      hasClient: false,
+      hasSecret: false,
+      connected: false,
+      scope: null,
+    }),
+    exportCreate: async () => ({
+      ok: false,
+      code: 'UNSUPPORTED',
+      message:
+        'Full Sheets export is only available in the desktop app.',
+    }),
+    exportAppend: async () => ({
+      ok: false,
+      code: 'UNSUPPORTED',
+      message:
+        'Full Sheets export is only available in the desktop app.',
+    }),
+  },
   provider: {
     get: () => providerGet(),
     set: (req) => providerSet(req),

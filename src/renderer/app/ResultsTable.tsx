@@ -22,7 +22,8 @@ import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
 import { firestoreRowsToCsv, firestoreRowsToTsv, formatCellText } from '@shared/csv';
 import { downloadText } from '../lib/download';
-import { copyTsvAndOpenSheets } from '../lib/sheetsExport';
+import { copyTsvAndOpenSheets, toSheetsCell } from '../lib/sheetsExport';
+import { ipc } from '../lib/ipcClient';
 import { ResultsToolbar, type ResultsViewMode } from './ResultsToolbar';
 import { VisualView } from './VisualView';
 
@@ -253,6 +254,33 @@ export function ResultsTable({
     await copyTsvAndOpenSheets(firestoreRowsToTsv(sorted, columnNames), toast);
   }
 
+  async function exportToSheetsApi() {
+    const sorted = rowModel.rows.map((r) => r.original);
+    const headers = ['__id', '__path', ...columnNames];
+    const matrix = sorted.map((row) => [
+      row.id,
+      row.path,
+      ...columnNames.map((c) => toSheetsCell(row.data[c])),
+    ]);
+    const title = question
+      ? `${question.slice(0, 80)} · ${new Date().toLocaleString()}`
+      : undefined;
+    toast.push('Creating Google Sheet…', 'info');
+    const res = await ipc.sheets.exportCreate({
+      title,
+      columns: headers,
+      rows: matrix,
+    });
+    if (res.ok) {
+      toast.push(`Exported ${res.rowCount} rows — opening sheet…`, 'success');
+      window.setTimeout(() => {
+        try { window.open(res.spreadsheetUrl, '_blank', 'noopener,noreferrer'); } catch { /* popup-blocked */ }
+      }, 150);
+    } else {
+      toast.push(`Sheets export failed: ${res.message}`, 'error');
+    }
+  }
+
   // Cache key for the Visual view. `rows` identity changes on every
   // new run, so identity alone is enough for invalidation; we mix in
   // `rows.length` and the first row's id to be extra safe against
@@ -273,6 +301,7 @@ export function ResultsTable({
         onDownloadJson={exportJson}
         onDownloadCsv={exportCsv}
         onCopyForSheets={rows.length > 0 ? copyForSheets : undefined}
+        onExportToSheets={rows.length > 0 ? exportToSheetsApi : undefined}
         canVisualize={canVisualize}
         visualizeHint={
           canVisualize

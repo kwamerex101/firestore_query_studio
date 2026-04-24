@@ -78,7 +78,7 @@ function ChartCard({
   return (
     <div
       className={cn(
-        'flex min-h-0 flex-col rounded-md border border-border/60 bg-card/40 p-3',
+        'flex flex-col rounded-md border border-border/60 bg-card/40 p-3',
         className,
       )}
     >
@@ -88,7 +88,14 @@ function ChartCard({
           <span className="text-[10px] text-muted-foreground/70">{hint}</span>
         ) : null}
       </div>
-      <div className="min-h-[200px] flex-1">{children}</div>
+      {/*
+       * Explicit height is non-negotiable for recharts' ResponsiveContainer:
+       * it measures parent `clientHeight` on mount and a `flex-1 min-h-*`
+       * combination resolves to 0 inside a scrollable grid cell, leaving the
+       * chart invisible. Fixed 240px matches the old implicit target height
+       * and plays nicely with the outer `min-h-[260px]` card in VisualView.
+       */}
+      <div className="h-[240px] w-full">{children}</div>
     </div>
   );
 }

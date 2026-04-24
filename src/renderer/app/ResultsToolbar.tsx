@@ -23,6 +23,12 @@ interface ResultsToolbarProps {
   onDownloadCsv?: () => void;
   /** Copy TSV + open Google Sheets paste target in the browser. */
   onCopyForSheets?: () => void;
+  /**
+   * Full OAuth Sheets API export. Only wired in the desktop build (web
+   * lacks a loopback redirect target). Renders a second Google Sheets
+   * entry in the Download menu when provided.
+   */
+  onExportToSheets?: () => void;
   /** When false, the Visual menu is disabled (e.g. no rows). */
   canVisualize?: boolean;
   visualizeHint?: string;
@@ -43,6 +49,7 @@ export function ResultsToolbar({
   onDownloadJson,
   onDownloadCsv,
   onCopyForSheets,
+  onExportToSheets,
   canVisualize = true,
   visualizeHint,
 }: ResultsToolbarProps) {
@@ -153,7 +160,15 @@ export function ResultsToolbar({
               description="Copy as TSV + open a new Google Sheet"
               onSelect={() => onCopyForSheets?.()}
             >
-              Google Sheets
+              Google Sheets (paste)
+            </MenuItem>
+            <MenuItem
+              icon={FileSpreadsheet}
+              disabled={!onExportToSheets}
+              description="Push directly via the Sheets API"
+              onSelect={() => onExportToSheets?.()}
+            >
+              Google Sheets (connected)
             </MenuItem>
           </MenuContent>
         </Menu>

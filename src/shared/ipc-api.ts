@@ -17,6 +17,12 @@ import {
   ClaudeGetResult,
   ClaudeListModelsResult,
   ClaudeTestOutcome,
+  SheetsStateResult,
+  SheetsSignInOutcome,
+  SheetsExportCreateRequest,
+  SheetsExportCreateOutcome,
+  SheetsExportAppendRequest,
+  SheetsExportAppendOutcome,
   ProviderResult,
   HistoryListRequest,
   HistoryListResult,
@@ -64,6 +70,7 @@ import {
   LlmSettings,
   CursorSettings,
   ClaudeSettings,
+  GoogleSheetsSettings,
   LlmProvider,
 } from './types/profile';
 import { CollectionSchema } from './types/schema';
@@ -153,6 +160,30 @@ export const ipcApi = {
   [IpcChannels.claudeTest]: {
     request: ClaudeSettings.optional(),
     response: ClaudeTestOutcome,
+  },
+  [IpcChannels.sheetsGet]: {
+    request: Void,
+    response: SheetsStateResult,
+  },
+  [IpcChannels.sheetsSet]: {
+    request: GoogleSheetsSettings,
+    response: SheetsStateResult,
+  },
+  [IpcChannels.sheetsSignIn]: {
+    request: Void,
+    response: SheetsSignInOutcome,
+  },
+  [IpcChannels.sheetsSignOut]: {
+    request: Void,
+    response: SheetsStateResult,
+  },
+  [IpcChannels.sheetsExportCreate]: {
+    request: SheetsExportCreateRequest,
+    response: SheetsExportCreateOutcome,
+  },
+  [IpcChannels.sheetsExportAppend]: {
+    request: SheetsExportAppendRequest,
+    response: SheetsExportAppendOutcome,
   },
   [IpcChannels.providerGet]: {
     request: Void,

@@ -66,6 +66,20 @@ export type FqsApi = {
       req?: IpcRequest<typeof IpcChannels.claudeTest>,
     ): Promise<IpcResponse<typeof IpcChannels.claudeTest>>;
   };
+  sheets: {
+    get(): Promise<IpcResponse<typeof IpcChannels.sheetsGet>>;
+    set(
+      req: IpcRequest<typeof IpcChannels.sheetsSet>,
+    ): Promise<IpcResponse<typeof IpcChannels.sheetsSet>>;
+    signIn(): Promise<IpcResponse<typeof IpcChannels.sheetsSignIn>>;
+    signOut(): Promise<IpcResponse<typeof IpcChannels.sheetsSignOut>>;
+    exportCreate(
+      req: IpcRequest<typeof IpcChannels.sheetsExportCreate>,
+    ): Promise<IpcResponse<typeof IpcChannels.sheetsExportCreate>>;
+    exportAppend(
+      req: IpcRequest<typeof IpcChannels.sheetsExportAppend>,
+    ): Promise<IpcResponse<typeof IpcChannels.sheetsExportAppend>>;
+  };
   provider: {
     get(): Promise<IpcResponse<typeof IpcChannels.providerGet>>;
     set(

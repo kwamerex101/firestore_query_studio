@@ -428,6 +428,26 @@ export const ClaudePermissionMode = z.enum([
 ]);
 export type ClaudePermissionMode = z.infer<typeof ClaudePermissionMode>;
 
+/**
+ * Google Sheets export credentials. The user supplies their own OAuth
+ * client ID + secret from Google Cloud Console (Desktop app client type)
+ * so we never ship app-wide credentials into an open-source repo.
+ */
+export const GoogleSheetsSettings = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+});
+export type GoogleSheetsSettings = z.infer<typeof GoogleSheetsSettings>;
+
+export const GoogleSheetsTokens = z.object({
+  accessToken: z.string().nullable(),
+  refreshToken: z.string().nullable(),
+  expiryDate: z.number().nullable(),
+  scope: z.string().nullable(),
+  tokenType: z.string().nullable(),
+});
+export type GoogleSheetsTokens = z.infer<typeof GoogleSheetsTokens>;
+
 export const ClaudeSettings = z.object({
   /** Executable path. `claude` relies on PATH resolution. */
   command: z.string().min(1).default('claude'),
