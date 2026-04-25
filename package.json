@@ -31,16 +31,20 @@
     "@google-cloud/bigquery": "^8.1.1",
     "@tanstack/react-table": "^8.21.2",
     "@tanstack/react-virtual": "^3.13.2",
+    "better-sqlite3": "^12.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.3",
     "firebase": "^12.12.1",
     "firebase-admin": "^13.1.0",
+    "google-auth-library": "^10.6.2",
+    "googleapis": "^171.4.0",
     "idb": "^8.0.3",
     "keytar": "^7.9.0",
     "lucide-react": "^0.469.0",
     "mssql": "^12.3.1",
     "mysql2": "^3.22.2",
+    "papaparse": "^5.5.3",
     "pg": "^8.13.1",
     "pg-query-stream": "^4.14.0",
     "react": "^19.0.0",
@@ -48,12 +52,15 @@
     "recharts": "^3.8.1",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/mssql": "^12.3.0",
     "@types/node": "^22.10.5",
+    "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.11.10",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
@@ -80,7 +87,8 @@
       "esbuild",
       "protobufjs",
       "@firebase/util",
-      "pg"
+      "pg",
+      "better-sqlite3"
     ]
   }
 }

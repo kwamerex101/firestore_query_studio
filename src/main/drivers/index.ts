@@ -1,5 +1,6 @@
 import {
   isBigQueryProfile,
+  isFileProfile,
   isFirestoreProfile,
   isMssqlProfile,
   isMysqlProfile,
@@ -27,6 +28,7 @@ let postgresMod: typeof import('./postgres') | null = null;
 let mysqlMod: typeof import('./mysql') | null = null;
 let mssqlMod: typeof import('./mssql') | null = null;
 let bigqueryMod: typeof import('./bigquery') | null = null;
+let fileSqliteMod: typeof import('./fileSqlite') | null = null;
 
 async function loadPostgres() {
   if (!postgresMod) postgresMod = await import('./postgres');
@@ -43,6 +45,10 @@ async function loadMssql() {
 async function loadBigQuery() {
   if (!bigqueryMod) bigqueryMod = await import('./bigquery');
   return bigqueryMod;
+}
+async function loadFileSqlite() {
+  if (!fileSqliteMod) fileSqliteMod = await import('./fileSqlite');
+  return fileSqliteMod;
 }
 
 /**
@@ -80,6 +86,10 @@ export async function createDriver(profile: Profile): Promise<DatabaseDriver> {
     const { BigQueryDriver } = await loadBigQuery();
     return BigQueryDriver.connect(profile);
   }
+  if (isFileProfile(profile)) {
+    const { SqliteFileDriver } = await loadFileSqlite();
+    return SqliteFileDriver.connect(profile);
+  }
   // Exhaustiveness guard — if Engine gains a variant and nobody updates this
   // file, TypeScript will flag `profile` as `never` right here.
   const _exhaustive: never = profile;
@@ -111,6 +121,14 @@ export async function probeSqlDatabases(
         ok: false,
         code: 'UNSUPPORTED_ENGINE',
         message: 'BigQuery dataset listing uses a separate probe.',
+        elapsedMs: 0,
+      };
+    case 'sqlite':
+      // File-backed profiles ship their own SQLite; no probe needed.
+      return {
+        ok: false,
+        code: 'UNSUPPORTED_ENGINE',
+        message: 'File-backed profiles do not support the SQL probe flow.',
         elapsedMs: 0,
       };
     default: {
@@ -153,6 +171,13 @@ export async function probeSqlSchemas(
         ok: false,
         code: 'UNSUPPORTED_ENGINE',
         message: 'BigQuery datasets map onto the database dropdown, not schemas.',
+        elapsedMs: 0,
+      };
+    case 'sqlite':
+      return {
+        ok: false,
+        code: 'UNSUPPORTED_ENGINE',
+        message: 'File-backed profiles have no schema layer.',
         elapsedMs: 0,
       };
     default: {

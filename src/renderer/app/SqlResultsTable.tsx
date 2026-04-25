@@ -12,7 +12,8 @@ import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
 import { formatCellText, sqlRowsToCsv, sqlRowsToTsv } from '@shared/csv';
 import { downloadText } from '../lib/download';
-import { copyTsvAndOpenSheets } from '../lib/sheetsExport';
+import { copyTsvAndOpenSheets, toSheetsMatrix } from '../lib/sheetsExport';
+import { ipc } from '../lib/ipcClient';
 import { ResultsToolbar, type ResultsViewMode } from './ResultsToolbar';
 import { VisualView } from './VisualView';
 
@@ -71,6 +72,28 @@ export function SqlResultsTable({
     await copyTsvAndOpenSheets(sqlRowsToTsv(rows, columns), toast);
   }
 
+  async function exportToSheetsApi() {
+    const headers = columns.map((c) => c.name);
+    const matrix = toSheetsMatrix(headers, rows);
+    const title = question
+      ? `${question.slice(0, 80)} · ${new Date().toLocaleString()}`
+      : `SQL export · ${new Date().toLocaleString()}`;
+    toast.push('Creating Google Sheet…', 'info');
+    const res = await ipc.sheets.exportCreate({
+      title,
+      columns: headers,
+      rows: matrix,
+    });
+    if (res.ok) {
+      toast.push(`Exported ${res.rowCount} rows — opening sheet…`, 'success');
+      window.setTimeout(() => {
+        try { window.open(res.spreadsheetUrl, '_blank', 'noopener,noreferrer'); } catch { /* popup-blocked */ }
+      }, 150);
+    } else {
+      toast.push(`Sheets export failed: ${res.message}`, 'error');
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ResultsToolbar
@@ -90,6 +113,7 @@ export function SqlResultsTable({
         onDownloadJson={exportJson}
         onDownloadCsv={exportCsv}
         onCopyForSheets={rows.length > 0 ? copyForSheets : undefined}
+        onExportToSheets={rows.length > 0 ? exportToSheetsApi : undefined}
         canVisualize={canVisualize}
         visualizeHint={
           canVisualize

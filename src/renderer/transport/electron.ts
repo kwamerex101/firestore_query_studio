@@ -76,6 +76,7 @@ const capabilities: TransportCapabilities = {
   mysqlProfiles: true,
   mssqlProfiles: true,
   bigQueryProfiles: true,
+  fileProfiles: true,
   cursorCli: true,
   keychainStorage: 'os',
 };

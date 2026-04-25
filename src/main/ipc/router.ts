@@ -17,6 +17,11 @@ import {
   setCursorSettings,
   getClaudeSettings,
   setClaudeSettings,
+  getSheetsSettings,
+  setSheetsSettings,
+  getSheetsTokens,
+  setSheetsTokens,
+  clearSheetsTokens,
   getActiveProvider,
   setActiveProvider,
 } from '../profiles/secrets';
@@ -62,6 +67,11 @@ import type { SqlProbeConfig } from '../drivers/types';
 import { chat, LlmError } from '../llm/openaiCompat';
 import { listCursorModels, testCursorCli } from '../llm/cursorCli';
 import { listClaudeModels, testClaudeCli } from '../llm/claudeCli';
+import { runSheetsOAuth, hasValidTokens } from '../export/sheetsAuth';
+import {
+  appendToSpreadsheet,
+  createSpreadsheet,
+} from '../export/sheetsApi';
 import {
   addHistoryEntry,
   clearHistory,
@@ -76,6 +86,7 @@ import {
   pickServiceAccount,
   validateServiceAccount,
 } from '../dialogs/serviceAccount';
+import { pickDataFile } from '../dialogs/dataFile';
 
 type Handler<C extends IpcChannel> = (
   req: z.infer<(typeof ipcApi)[C]['request']>,
@@ -151,7 +162,8 @@ async function resolveProbeCfg(args: {
     if (
       saved &&
       isSqlProfile(saved) &&
-      saved.engine !== 'bigquery'
+      saved.engine !== 'bigquery' &&
+      saved.engine !== 'file'
     ) {
       engine = engine ?? (saved.engine as SqlDialect);
       host = host ?? saved.host;
@@ -387,6 +399,134 @@ export function registerIpcHandlers(): void {
       };
     }
     return testClaudeCli(effective);
+  });
+
+  register(IpcChannels.sheetsGet, async () => {
+    const settings = await getSheetsSettings();
+    const tokens = await getSheetsTokens();
+    return {
+      hasClient: !!settings,
+      clientId: settings?.clientId,
+      hasSecret: !!settings?.clientSecret,
+      connected: hasValidTokens(tokens),
+      scope: tokens?.scope ?? null,
+    };
+  });
+
+  register(IpcChannels.sheetsSet, async (input) => {
+    const saved = await setSheetsSettings(input);
+    const tokens = await getSheetsTokens();
+    return {
+      hasClient: true,
+      clientId: saved.clientId,
+      hasSecret: !!saved.clientSecret,
+      connected: hasValidTokens(tokens),
+      scope: tokens?.scope ?? null,
+    };
+  });
+
+  register(IpcChannels.sheetsSignIn, async () => {
+    const settings = await getSheetsSettings();
+    if (!settings) {
+      return {
+        ok: false as const,
+        code: 'NOT_CONFIGURED',
+        message:
+          'Save a Google OAuth client ID and secret before signing in.',
+      };
+    }
+    try {
+      const tokens = await runSheetsOAuth(settings);
+      if (!tokens.refreshToken) {
+        return {
+          ok: false as const,
+          code: 'NO_REFRESH_TOKEN',
+          message:
+            'Google did not return a refresh token. Revoke the previous grant at myaccount.google.com/permissions and try again.',
+        };
+      }
+      await setSheetsTokens(tokens);
+      return { ok: true as const, scope: tokens.scope };
+    } catch (err) {
+      return {
+        ok: false as const,
+        code: 'OAUTH_FAILED',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  register(IpcChannels.sheetsSignOut, async () => {
+    await clearSheetsTokens();
+    const settings = await getSheetsSettings();
+    return {
+      hasClient: !!settings,
+      clientId: settings?.clientId,
+      hasSecret: !!settings?.clientSecret,
+      connected: false,
+      scope: null,
+    };
+  });
+
+  register(IpcChannels.sheetsExportCreate, async (input) => {
+    const settings = await getSheetsSettings();
+    const tokens = await getSheetsTokens();
+    if (!settings || !hasValidTokens(tokens)) {
+      return {
+        ok: false as const,
+        code: 'NOT_CONNECTED',
+        message:
+          'Sign in to Google Sheets from Settings → Google Sheets before exporting.',
+      };
+    }
+    try {
+      const result = await createSpreadsheet({
+        clientId: settings.clientId,
+        clientSecret: settings.clientSecret,
+        tokens: tokens!,
+        title: input.title,
+        columns: input.columns,
+        rows: input.rows,
+      });
+      return { ok: true as const, ...result };
+    } catch (err) {
+      return {
+        ok: false as const,
+        code: 'EXPORT_FAILED',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
+  register(IpcChannels.sheetsExportAppend, async (input) => {
+    const settings = await getSheetsSettings();
+    const tokens = await getSheetsTokens();
+    if (!settings || !hasValidTokens(tokens)) {
+      return {
+        ok: false as const,
+        code: 'NOT_CONNECTED',
+        message:
+          'Sign in to Google Sheets from Settings → Google Sheets before exporting.',
+      };
+    }
+    try {
+      const result = await appendToSpreadsheet({
+        clientId: settings.clientId,
+        clientSecret: settings.clientSecret,
+        tokens: tokens!,
+        columns: input.columns,
+        rows: input.rows,
+        spreadsheetRef: input.spreadsheetRef,
+        sheetName: input.sheetName,
+      });
+      return { ok: true as const, ...result };
+    } catch (err) {
+      return {
+        ok: false as const,
+        code: 'EXPORT_FAILED',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
   });
 
   register(IpcChannels.providerGet, async () => {
@@ -756,6 +896,10 @@ export function registerIpcHandlers(): void {
 
   register(IpcChannels.dialogImportServiceAccount, async (input) => {
     return importServiceAccount(input);
+  });
+
+  register(IpcChannels.dialogPickDataFile, async () => {
+    return pickDataFile();
   });
 
   registerWithSender(IpcChannels.sqlStreamStart, async (input, sender) => {

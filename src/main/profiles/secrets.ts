@@ -5,6 +5,8 @@ import {
   LlmSettings,
   CursorSettings,
   ClaudeSettings,
+  GoogleSheetsSettings,
+  GoogleSheetsTokens,
   LlmProvider,
 } from '@shared/types/profile';
 
@@ -15,6 +17,8 @@ type SecretsShape = {
   llm?: LlmSettings;
   cursor?: CursorSettings;
   claude?: ClaudeSettings;
+  sheets?: GoogleSheetsSettings;
+  sheetsTokens?: GoogleSheetsTokens;
   provider?: LlmProvider;
   /**
    * Per-profile secrets (e.g. Postgres passwords). Keyed by profile id.
@@ -132,6 +136,61 @@ export async function setClaudeSettings(settings: ClaudeSettings): Promise<Claud
 export async function clearClaudeSettings(): Promise<void> {
   const data = await readRaw();
   delete data.claude;
+  await writeRaw(data);
+}
+
+export async function getSheetsSettings(): Promise<GoogleSheetsSettings | null> {
+  const data = await readRaw();
+  if (!data.sheets) return null;
+  const parsed = GoogleSheetsSettings.safeParse(data.sheets);
+  return parsed.success ? parsed.data : null;
+}
+
+export async function setSheetsSettings(
+  settings: GoogleSheetsSettings,
+): Promise<GoogleSheetsSettings> {
+  const parsed = GoogleSheetsSettings.parse(settings);
+  const data = await readRaw();
+  data.sheets = parsed;
+  // Changing the client credentials invalidates any stored token.
+  if (
+    !data.sheets ||
+    data.sheets.clientId !== parsed.clientId ||
+    data.sheets.clientSecret !== parsed.clientSecret
+  ) {
+    delete data.sheetsTokens;
+  }
+  await writeRaw(data);
+  return parsed;
+}
+
+export async function clearSheetsSettings(): Promise<void> {
+  const data = await readRaw();
+  delete data.sheets;
+  delete data.sheetsTokens;
+  await writeRaw(data);
+}
+
+export async function getSheetsTokens(): Promise<GoogleSheetsTokens | null> {
+  const data = await readRaw();
+  if (!data.sheetsTokens) return null;
+  const parsed = GoogleSheetsTokens.safeParse(data.sheetsTokens);
+  return parsed.success ? parsed.data : null;
+}
+
+export async function setSheetsTokens(
+  tokens: GoogleSheetsTokens,
+): Promise<GoogleSheetsTokens> {
+  const parsed = GoogleSheetsTokens.parse(tokens);
+  const data = await readRaw();
+  data.sheetsTokens = parsed;
+  await writeRaw(data);
+  return parsed;
+}
+
+export async function clearSheetsTokens(): Promise<void> {
+  const data = await readRaw();
+  delete data.sheetsTokens;
   await writeRaw(data);
 }
 

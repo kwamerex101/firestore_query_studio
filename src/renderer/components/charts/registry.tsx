@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -10,7 +11,6 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -64,6 +64,8 @@ const tooltipStyle = {
 };
 const tooltipCursor = { fill: 'hsl(215 28% 20% / 0.35)' };
 
+const CHART_HEIGHT = 240;
+
 function ChartCard({
   title,
   className,
@@ -72,13 +74,13 @@ function ChartCard({
 }: {
   title: string;
   className?: string;
-  children: React.ReactNode;
+  children: (size: { width: number; height: number }) => React.ReactNode;
   hint?: string;
 }) {
   return (
     <div
       className={cn(
-        'flex min-h-0 flex-col rounded-md border border-border/60 bg-card/40 p-3',
+        'flex flex-col rounded-md border border-border/60 bg-card/40 p-3',
         className,
       )}
     >
@@ -88,9 +90,111 @@ function ChartCard({
           <span className="text-[10px] text-muted-foreground/70">{hint}</span>
         ) : null}
       </div>
-      <div className="min-h-[200px] flex-1">{children}</div>
+      {/*
+       * Inline height avoids Tailwind JIT surprises and gives the
+       * ResizeObserver in `SizedChart` a concrete parent to measure
+       * synchronously on the first layout. `width: '100%'` pins to the
+       * grid cell's resolved width.
+       */}
+      <div style={{ height: CHART_HEIGHT, width: '100%' }}>
+        <SizedChart>{children}</SizedChart>
+      </div>
     </div>
   );
+}
+
+/**
+ * Replacement for recharts' `ResponsiveContainer`. The default
+ * implementation delegates to a `ResizeObserver` that can fire with
+ * `-1`/`0` dimensions during the first render inside flex/grid parents,
+ * triggering the "width(0) and height(0) of chart should be greater
+ * than 0" warning and rendering no bars.
+ *
+ * `SizedChart` instead measures the parent's resolved box via a ref and
+ * keeps the latest size in React state. We only render children once a
+ * positive (width, height) pair is known — so recharts always receives
+ * a numeric, non-zero dimension and never logs the warning.
+ */
+function SizedChart({
+  children,
+}: {
+  children: (size: { width: number; height: number }) => React.ReactNode;
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    // Seed with the synchronous layout dimensions so the first render
+    // after mount already has real numbers.
+    const rect = host.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setSize({ width: Math.round(rect.width), height: Math.round(rect.height) });
+    }
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const box = entry.contentRect;
+      if (box.width <= 0 || box.height <= 0) return;
+      setSize({ width: Math.round(box.width), height: Math.round(box.height) });
+    });
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={hostRef} style={{ width: '100%', height: '100%' }}>
+      {size ? children(size) : null}
+    </div>
+  );
+}
+
+/**
+ * Rendered in place of a chart when the spec's data is empty or its
+ * axis fields don't match the keys actually present on `spec.data`.
+ * Without this, recharts silently renders a blank axis-and-gridlines
+ * frame and the user can't tell whether the chart succeeded or failed.
+ */
+function ChartDataError({ message }: { message: string }) {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-sm bg-background/40 p-3 text-center">
+      <span className="text-[11px] font-semibold text-muted-foreground">
+        Chart has no data
+      </span>
+      <span className="text-[10px] text-muted-foreground/80">{message}</span>
+    </div>
+  );
+}
+
+/**
+ * Validate a Cartesian spec (bar/line/area/scatter) before recharts gets
+ * a chance to render a silent empty chart. Returns an error message when
+ * something's off, or `null` when the spec is renderable.
+ */
+function cartesianDataError(
+  data: ReadonlyArray<Record<string, unknown>>,
+  xField: string,
+  yField: string,
+): string | null {
+  if (!Array.isArray(data) || data.length === 0) {
+    return 'The model returned an empty data array for this chart.';
+  }
+  const first = data[0] ?? {};
+  if (!(xField in first)) {
+    return `Missing x-axis field "${xField}" on the data rows.`;
+  }
+  if (!(yField in first)) {
+    return `Missing y-axis field "${yField}" on the data rows.`;
+  }
+  const yNumeric = data.some((row) => {
+    const v = row[yField];
+    return typeof v === 'number' && Number.isFinite(v);
+  });
+  if (!yNumeric) {
+    return `The y-axis field "${yField}" has no numeric values.`;
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -177,10 +281,20 @@ export function KpiCard({ spec }: { spec: KpiSpec }) {
 
 export function BarChartCard({ spec }: { spec: BarSpec }) {
   const horizontal = spec.orientation === 'horizontal';
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        {() => <ChartDataError message={err} />}
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
-      <ResponsiveContainer width="100%" height="100%">
+      {({ width, height }) => (
         <BarChart
+          width={width}
+          height={height}
           data={spec.data}
           layout={horizontal ? 'vertical' : 'horizontal'}
           margin={{ top: 8, right: 12, bottom: 8, left: 8 }}
@@ -224,13 +338,9 @@ export function BarChartCard({ spec }: { spec: BarSpec }) {
             </>
           )}
           <Tooltip contentStyle={tooltipStyle} cursor={tooltipCursor} />
-          <Bar
-            dataKey={horizontal ? spec.yField : spec.yField}
-            fill={PRIMARY}
-            radius={[4, 4, 0, 0]}
-          />
+          <Bar dataKey={spec.yField} fill={PRIMARY} radius={[4, 4, 0, 0]} />
         </BarChart>
-      </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }
@@ -240,10 +350,20 @@ export function BarChartCard({ spec }: { spec: BarSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function LineChartCard({ spec }: { spec: LineSpec }) {
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        {() => <ChartDataError message={err} />}
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
-      <ResponsiveContainer width="100%" height="100%">
+      {({ width, height }) => (
         <LineChart
+          width={width}
+          height={height}
           data={spec.data}
           margin={{ top: 8, right: 12, bottom: 8, left: 8 }}
         >
@@ -270,7 +390,7 @@ export function LineChartCard({ spec }: { spec: LineSpec }) {
             isAnimationActive={false}
           />
         </LineChart>
-      </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }
@@ -280,10 +400,20 @@ export function LineChartCard({ spec }: { spec: LineSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function AreaChartCard({ spec }: { spec: AreaSpec }) {
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        {() => <ChartDataError message={err} />}
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
-      <ResponsiveContainer width="100%" height="100%">
+      {({ width, height }) => (
         <AreaChart
+          width={width}
+          height={height}
           data={spec.data}
           margin={{ top: 8, right: 12, bottom: 8, left: 8 }}
         >
@@ -315,7 +445,7 @@ export function AreaChartCard({ spec }: { spec: AreaSpec }) {
             isAnimationActive={false}
           />
         </AreaChart>
-      </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }
@@ -325,10 +455,18 @@ export function AreaChartCard({ spec }: { spec: AreaSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function PieChartCard({ spec }: { spec: PieSpec }) {
+  const err = cartesianDataError(spec.data, spec.labelField, spec.valueField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        {() => <ChartDataError message={err} />}
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
+      {({ width, height }) => (
+        <PieChart width={width} height={height}>
           <Pie
             data={spec.data}
             dataKey={spec.valueField}
@@ -349,7 +487,7 @@ export function PieChartCard({ spec }: { spec: PieSpec }) {
             wrapperStyle={{ fontSize: 10, color: 'hsl(217 12% 66%)' }}
           />
         </PieChart>
-      </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }
@@ -359,10 +497,19 @@ export function PieChartCard({ spec }: { spec: PieSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function HistogramChartCard({ spec }: { spec: HistogramSpec }) {
+  if (!Array.isArray(spec.bins) || spec.bins.length === 0) {
+    return (
+      <ChartCard title={spec.title} hint={`field: ${spec.field}`}>
+        {() => <ChartDataError message="The model returned no histogram bins." />}
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title} hint={`field: ${spec.field}`}>
-      <ResponsiveContainer width="100%" height="100%">
+      {({ width, height }) => (
         <BarChart
+          width={width}
+          height={height}
           data={spec.bins}
           margin={{ top: 8, right: 12, bottom: 8, left: 8 }}
         >
@@ -382,7 +529,7 @@ export function HistogramChartCard({ spec }: { spec: HistogramSpec }) {
           <Tooltip contentStyle={tooltipStyle} cursor={tooltipCursor} />
           <Bar dataKey="count" fill={PRIMARY} radius={[4, 4, 0, 0]} />
         </BarChart>
-      </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }
@@ -392,10 +539,22 @@ export function HistogramChartCard({ spec }: { spec: HistogramSpec }) {
 /* ------------------------------------------------------------------ */
 
 export function ScatterChartCard({ spec }: { spec: ScatterSpec }) {
+  const err = cartesianDataError(spec.data, spec.xField, spec.yField);
+  if (err) {
+    return (
+      <ChartCard title={spec.title}>
+        {() => <ChartDataError message={err} />}
+      </ChartCard>
+    );
+  }
   return (
     <ChartCard title={spec.title}>
-      <ResponsiveContainer width="100%" height="100%">
-        <ScatterChart margin={{ top: 8, right: 12, bottom: 8, left: 8 }}>
+      {({ width, height }) => (
+        <ScatterChart
+          width={width}
+          height={height}
+          margin={{ top: 8, right: 12, bottom: 8, left: 8 }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
           <XAxis
             type="number"
@@ -415,7 +574,7 @@ export function ScatterChartCard({ spec }: { spec: ScatterSpec }) {
           <Tooltip contentStyle={tooltipStyle} cursor={{ strokeDasharray: '3 3' }} />
           <Scatter data={spec.data} fill={PRIMARY} />
         </ScatterChart>
-      </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }

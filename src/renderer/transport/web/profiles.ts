@@ -82,6 +82,11 @@ export async function createProfile(input: ProfileInput): Promise<Profile> {
       'BigQuery profiles are not available in the web build. Use the desktop app — BigQuery auth requires a service-account JSON only the main process can read.',
     );
   }
+  if ('engine' in parsed && parsed.engine === 'file') {
+    throw new Error(
+      'File-backed profiles require native SQLite and filesystem access, so they are only available in the desktop app.',
+    );
+  }
   if (!('kind' in parsed) || parsed.kind === 'emulator') {
     throw new Error(
       'The Firestore emulator flow requires the desktop app. In the web build, create a "live" profile and supply your Firebase Web config.',

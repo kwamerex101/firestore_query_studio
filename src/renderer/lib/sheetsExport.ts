@@ -1,22 +1,18 @@
 /**
  * Zero-auth path for getting results into Google Sheets.
  *
- * Rather than building a full OAuth + Sheets API v4 export (which requires
- * provisioning Google Cloud credentials, running a local redirect server
- * in Electron, and persistent token storage), we use the fact that
- * Google Sheets' paste handler recognizes TSV and splits into columns.
+ * Two complementary flows live here:
  *
- *  1. Copy TSV (tab-separated) to the clipboard.
- *  2. Open `sheets.new` which creates a brand-new untitled Sheet.
- *  3. Prompt the user to paste (⌘V / Ctrl-V) into A1.
+ * 1. **TSV + sheets.new** (this file's original scope). No OAuth — just
+ *    copy the full result as TSV, open a new Sheet, and have the user
+ *    paste. Works in Electron and the web build.
  *
- * Works identically in Electron (opens via shell.openExternal → default
- * browser) and the web build (target=_blank). No secrets, no OAuth
- * consent screen, no refresh-token plumbing.
- *
- * If the user later needs scripted exports (append to existing sheet,
- * schedule on a cron), a full Sheets API integration can layer on top of
- * this without displacing the no-auth flow that covers the 80% case.
+ * 2. **Full Sheets API v4 export** via `exportToSheetsApi` below. Requires
+ *    the user to connect in Settings → Google Sheets first. When
+ *    connected, the results toolbar can call straight into
+ *    `ipc.sheets.exportCreate` (new untitled sheet) or
+ *    `ipc.sheets.exportAppend` (append to an existing spreadsheet by
+ *    URL / id).
  */
 
 type ToastPush = (msg: string, tone?: 'success' | 'error' | 'info') => void;
@@ -48,4 +44,32 @@ export async function copyTsvAndOpenSheets(
          user can navigate to sheets.new manually. */
     }
   }, 200);
+}
+
+/**
+ * Normalize an unknown cell value to a primitive that survives IPC
+ * serialization into the Sheets API. Mirrors the main-process
+ * `normalizeCell` helper — the two need to agree on null/object handling.
+ */
+export function toSheetsCell(value: unknown): string | number | boolean | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Build a 2D matrix of primitives ready for the Sheets export IPC.
+ * Each row is aligned to `columns`: missing keys become null.
+ */
+export function toSheetsMatrix(
+  columns: readonly string[],
+  rows: ReadonlyArray<Record<string, unknown>>,
+): Array<Array<string | number | boolean | null>> {
+  return rows.map((row) => columns.map((c) => toSheetsCell(row[c])));
 }
