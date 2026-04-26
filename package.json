@@ -25,6 +25,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:emulator": "firebase emulators:exec --only firestore \"vitest run --config vitest.emulator.config.ts\"",
+    "test:emulator-rtdb": "firebase emulators:exec --only database \"vitest run --config vitest.emulator.config.ts tests/integration/rtdbDriver.emulator.test.ts\"",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\" \"tests/**/*.ts\""
   },
   "dependencies": {

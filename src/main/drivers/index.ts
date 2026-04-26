@@ -5,6 +5,7 @@ import {
   isMssqlProfile,
   isMysqlProfile,
   isPostgresProfile,
+  isRtdbProfile,
   type Profile,
   type SqlDialect,
 } from '@shared/types/profile';
@@ -15,6 +16,7 @@ import type {
   SqlProbeSchemasOutcome,
 } from './types';
 import { FirestoreDriver } from './firestore';
+import { RtdbDriver } from './rtdb';
 import { getProfileSecret } from '../profiles/secrets';
 
 /**
@@ -60,6 +62,9 @@ async function loadFileSqlite() {
 export async function createDriver(profile: Profile): Promise<DatabaseDriver> {
   if (isFirestoreProfile(profile)) {
     return FirestoreDriver.connect(profile);
+  }
+  if (isRtdbProfile(profile)) {
+    return RtdbDriver.connect(profile);
   }
   if (isPostgresProfile(profile)) {
     const [{ PostgresDriver }, password] = await Promise.all([
@@ -195,3 +200,4 @@ export async function probeSqlSchemas(
 export type { DatabaseDriver, SqlDriver } from './types';
 export { isSqlDriver } from './types';
 export { FirestoreDriver } from './firestore';
+export { RtdbDriver } from './rtdb';

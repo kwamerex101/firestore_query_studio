@@ -177,6 +177,14 @@ const api: FqsApi = {
   collections: {
     list: () => collectionsList(),
   },
+  rtdb: {
+    read: async () => ({
+      ok: false as const,
+      code: 'UNSUPPORTED_IN_WEB',
+      message:
+        'Realtime Database Admin reads are only available in the desktop app. Use the web build with client SDK and security rules for browser access.',
+    }),
+  },
   db: {
     testConnection: (req) => dbTestConnection(req),
     probeSqlDatabases: async () => ({

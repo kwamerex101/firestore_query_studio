@@ -113,6 +113,11 @@ export type FqsApi = {
   collections: {
     list(): Promise<IpcResponse<typeof IpcChannels.collectionsList>>;
   };
+  rtdb: {
+    read(
+      req: IpcRequest<typeof IpcChannels.rtdbRead>,
+    ): Promise<IpcResponse<typeof IpcChannels.rtdbRead>>;
+  };
   db: {
     testConnection(
       req?: IpcRequest<typeof IpcChannels.dbTestConnection>,

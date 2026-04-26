@@ -80,6 +80,7 @@ export const IpcChannels = {
   streamCancel: 'stream.cancel',
   exportStart: 'export.start',
   exportCancel: 'export.cancel',
+  rtdbRead: 'rtdb.read',
 } as const;
 
 /**
@@ -183,6 +184,23 @@ export const PlanBuildErr = z.object({
 });
 export const PlanBuildOutcome = z.discriminatedUnion('ok', [PlanBuildOk, PlanBuildErr]);
 export type PlanBuildOutcome = z.infer<typeof PlanBuildOutcome>;
+
+export const RtdbReadRequest = z.object({
+  path: z.string().min(1).max(2048),
+});
+export type RtdbReadRequest = z.infer<typeof RtdbReadRequest>;
+
+export const RtdbReadOk = z.object({
+  ok: z.literal(true),
+  value: z.unknown(),
+});
+export const RtdbReadErr = z.object({
+  ok: z.literal(false),
+  code: z.string(),
+  message: z.string(),
+});
+export const RtdbReadOutcome = z.discriminatedUnion('ok', [RtdbReadOk, RtdbReadErr]);
+export type RtdbReadOutcome = z.infer<typeof RtdbReadOutcome>;
 
 export const ExecuteRequest = z.object({
   plan: QueryPlan,

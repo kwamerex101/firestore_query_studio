@@ -91,6 +91,9 @@ export type FormState = {
   // File-backed only
   fileSourcePath: string;
   fileKind: 'csv' | 'xlsx';
+
+  // Realtime Database
+  rtdbDatabaseUrl: string;
 };
 
 export const emptyForm: FormState = {
@@ -127,6 +130,8 @@ export const emptyForm: FormState = {
 
   fileSourcePath: '',
   fileKind: 'csv',
+
+  rtdbDatabaseUrl: '',
 };
 
 export function defaultPortFor(engine: Engine): string {
@@ -137,6 +142,8 @@ export function defaultPortFor(engine: Engine): string {
       return '3306';
     case 'mssql':
       return '1433';
+    case 'rtdb':
+      return '9000';
     default:
       return '8080';
   }
@@ -222,6 +229,29 @@ export function buildProfileInputFromForm(form: FormState): ProfileInput {
       sourcePath: form.fileSourcePath.trim(),
       queryTimeoutMs: Number(form.queryTimeoutMs) || 30_000,
       defaultLimit: Number(form.defaultLimit) || 500,
+    };
+  }
+  if (form.engine === 'rtdb') {
+    if (form.kind === 'live') {
+      return {
+        engine: 'rtdb' as const,
+        kind: 'live' as const,
+        name: form.name.trim(),
+        envTag: form.envTag,
+        projectId: form.projectId.trim(),
+        serviceAccountPath: form.serviceAccountPath.trim(),
+        databaseUrl: form.rtdbDatabaseUrl.trim(),
+      };
+    }
+    return {
+      engine: 'rtdb' as const,
+      kind: 'emulator' as const,
+      name: form.name.trim(),
+      envTag: form.envTag,
+      projectId: form.projectId.trim(),
+      host: form.host.trim() || '127.0.0.1',
+      port: Number(form.port) || 9000,
+      databaseUrl: form.rtdbDatabaseUrl.trim() || undefined,
     };
   }
   const base = {
@@ -357,6 +387,21 @@ export function ProfilesPage() {
         queryTimeoutMs: String(p.queryTimeoutMs),
         defaultLimit: String(p.defaultLimit),
       });
+    } else if (p.engine === 'rtdb') {
+      setForm({
+        ...emptyForm,
+        name: p.name,
+        engine: 'rtdb',
+        envTag: p.envTag,
+        kind: p.kind,
+        projectId: p.projectId,
+        serviceAccountPath: p.kind === 'live' ? p.serviceAccountPath : '',
+        rtdbDatabaseUrl: p.databaseUrl,
+        host: p.kind === 'emulator' ? p.host : '127.0.0.1',
+        port: p.kind === 'emulator' ? String(p.port) : '9000',
+        scanCap: '500',
+        sampleSize: '10',
+      });
     } else {
       setForm({
         ...emptyForm,
@@ -475,7 +520,7 @@ export function ProfilesPage() {
               defaultLimit: Number(form.defaultLimit) || 500,
             },
           });
-        } else if (editing.kind === 'live') {
+        } else if (editing.engine === 'firestore' && editing.kind === 'live') {
           const resolvedPath = await resolveServiceAccountPath(editing.id);
           await ipc.profiles.update({
             id: editing.id,
@@ -488,7 +533,7 @@ export function ProfilesPage() {
               sampleSize: Number(form.sampleSize),
             },
           });
-        } else {
+        } else if (editing.engine === 'firestore' && editing.kind === 'emulator') {
           await ipc.profiles.update({
             id: editing.id,
             update: {
@@ -499,6 +544,30 @@ export function ProfilesPage() {
               port: Number(form.port) || 8080,
               scanCap: Number(form.scanCap),
               sampleSize: Number(form.sampleSize),
+            },
+          });
+        } else if (editing.engine === 'rtdb' && editing.kind === 'live') {
+          const resolvedPath = await resolveServiceAccountPath(editing.id);
+          await ipc.profiles.update({
+            id: editing.id,
+            update: {
+              name,
+              envTag: form.envTag,
+              projectId: form.projectId.trim(),
+              serviceAccountPath: resolvedPath,
+              databaseUrl: form.rtdbDatabaseUrl.trim(),
+            },
+          });
+        } else if (editing.engine === 'rtdb' && editing.kind === 'emulator') {
+          await ipc.profiles.update({
+            id: editing.id,
+            update: {
+              name,
+              envTag: form.envTag,
+              projectId: form.projectId.trim(),
+              host: form.host.trim() || '127.0.0.1',
+              port: Number(form.port) || 9000,
+              databaseUrl: form.rtdbDatabaseUrl.trim() || undefined,
             },
           });
         }
@@ -518,6 +587,39 @@ export function ProfilesPage() {
           throw new Error('Firebase Project ID is required.');
         }
         if (
+          'engine' in input &&
+          input.engine === 'rtdb' &&
+          input.kind === 'live' &&
+          !form.rtdbDatabaseUrl.trim()
+        ) {
+          throw new Error('Database URL is required for Realtime Database (use the https URL from Firebase console).');
+        }
+        if (
+          'engine' in input &&
+          input.engine === 'rtdb' &&
+          input.kind === 'live' &&
+          form.importCopy &&
+          input.serviceAccountPath
+        ) {
+          const tempImport = await ipc.dialog.importServiceAccount({
+            path: input.serviceAccountPath,
+            profileId: `pending-${Date.now()}`,
+          });
+          const created = await ipc.profiles.create({
+            ...input,
+            serviceAccountPath: tempImport.path,
+          });
+          const finalImport = await ipc.dialog.importServiceAccount({
+            path: tempImport.path,
+            profileId: created.id,
+          });
+          if (finalImport.path !== tempImport.path) {
+            await ipc.profiles.update({
+              id: created.id,
+              update: { serviceAccountPath: finalImport.path },
+            });
+          }
+        } else if (
           !('engine' in input) &&
           'kind' in input &&
           input.kind === 'live' &&
@@ -570,7 +672,9 @@ export function ProfilesPage() {
       p.engine === 'postgres' || p.engine === 'mysql' || p.engine === 'mssql';
     const warning = isSql
       ? `Delete profile "${p.name}"? Its stored password is also removed; the database itself is untouched.`
-      : `Delete profile "${p.name}"? This only removes the profile; nothing on Firestore is touched.`;
+      : p.engine === 'rtdb'
+        ? `Delete profile "${p.name}"? This only removes the profile; nothing on Realtime Database is deleted.`
+        : `Delete profile "${p.name}"? This only removes the profile; nothing on Firestore is touched.`;
     if (!confirm(warning)) return;
     try {
       await ipc.profiles.delete({ id: p.id });
@@ -769,11 +873,16 @@ export function ProfilesPage() {
                       next === 'mssql'
                         ? defaultPortFor(next)
                         : form.sqlPort,
+                    port:
+                      next === 'rtdb' ? '9000' : next === 'firestore' ? '8080' : form.port,
                   });
                 }}
                 disabled={!!editing}
               >
                 <option value="firestore">Firebase Firestore</option>
+                {capabilities.shell === 'electron' ? (
+                  <option value="rtdb">Firebase Realtime Database</option>
+                ) : null}
                 {capabilities.postgresProfiles ? (
                   <option value="postgres">PostgreSQL</option>
                 ) : null}
@@ -814,6 +923,8 @@ export function ProfilesPage() {
 
           {form.engine === 'firestore' ? (
             <FirestoreFields form={form} setForm={setForm} editing={!!editing} />
+          ) : form.engine === 'rtdb' ? (
+            <RtdbFields form={form} setForm={setForm} editing={!!editing} />
           ) : form.engine === 'postgres' ? (
             <PostgresFields
               form={form}
@@ -954,6 +1065,35 @@ function ProfileCardDetails({ profile }: { profile: Profile }) {
       </div>
     );
   }
+  if (profile.engine === 'rtdb') {
+    return (
+      <div className="text-xs text-muted-foreground">
+        <div>
+          <span className="font-mono">{profile.projectId}</span>
+        </div>
+        <div
+          className="truncate"
+          title={profile.kind === 'live' ? profile.serviceAccountPath : undefined}
+        >
+          {profile.kind === 'live' ? (
+            <>
+              Live · <span className="font-mono">{profile.serviceAccountPath}</span>
+            </>
+          ) : (
+            <>
+              Emulator · <span className="font-mono">
+                {profile.host}:{profile.port}
+              </span>
+            </>
+          )}
+        </div>
+        <div className="truncate" title={profile.databaseUrl}>
+          databaseUrl <span className="font-mono">{profile.databaseUrl}</span> · maxMemoryMb{' '}
+          <span className="font-mono">{profile.maxMemoryMb}</span>
+        </div>
+      </div>
+    );
+  }
   if (profile.engine === 'file') {
     const tableCount = profile.tables.length;
     const totalRows = Object.values(profile.rowCounts).reduce((a, b) => a + b, 0);
@@ -1085,6 +1225,88 @@ function FirestoreFields({
           <Input value={form.sampleSize} onChange={(e) => setForm({ ...form, sampleSize: e.target.value })} />
         </div>
       </div>
+    </>
+  );
+}
+
+function RtdbFields({
+  form,
+  setForm,
+  editing,
+}: {
+  form: FormState;
+  setForm: (next: FormState) => void;
+  editing: boolean;
+}) {
+  return (
+    <>
+      <div>
+        <label className="label">Kind</label>
+        <Select
+          value={form.kind}
+          onChange={(e) => setForm({ ...form, kind: e.target.value as ProfileKind })}
+          disabled={editing}
+        >
+          <option value="emulator">Emulator</option>
+          <option value="live">Live (Admin SDK)</option>
+        </Select>
+      </div>
+      <div>
+        <label className="label">Firebase Project ID</label>
+        <Input
+          value={form.projectId}
+          onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+          placeholder="my-project-123"
+        />
+      </div>
+      {form.kind === 'live' ? (
+        <div>
+          <label className="label">Database URL</label>
+          <Input
+            value={form.rtdbDatabaseUrl}
+            onChange={(e) => setForm({ ...form, rtdbDatabaseUrl: e.target.value })}
+            placeholder="https://your-project-default-rtdb.firebaseio.com"
+            autoComplete="off"
+          />
+          <HelpNotice>
+            Firebase console → Realtime Database → copy the <span className="font-mono">https</span> URL. It
+            must match the project and service account.
+          </HelpNotice>
+        </div>
+      ) : (
+        <div>
+          <label className="label">Database URL (optional)</label>
+          <Input
+            value={form.rtdbDatabaseUrl}
+            onChange={(e) => setForm({ ...form, rtdbDatabaseUrl: e.target.value })}
+            placeholder="Leave blank to use a synthetic default; Admin SDK still requires https"
+            autoComplete="off"
+          />
+        </div>
+      )}
+      {form.kind === 'live' ? (
+        <div>
+          <ServiceAccountPicker
+            value={form.serviceAccountPath}
+            onChange={(path) => setForm({ ...form, serviceAccountPath: path })}
+            projectId={form.projectId}
+            importCopy={form.importCopy}
+            onImportChange={(next) => setForm({ ...form, importCopy: next })}
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="sm:col-span-2">
+            <label className="label">Emulator host</label>
+            <Input value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">Port</label>
+            <Input value={form.port} onChange={(e) => setForm({ ...form, port: e.target.value })} />
+            <p className="mt-1 text-xs text-muted-foreground">Default 9000 for the RTDB emulator</p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

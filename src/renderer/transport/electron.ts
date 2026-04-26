@@ -37,6 +37,7 @@ function resolveApi(): FqsApi {
     'plan',
     'execute',
     'collections',
+    'rtdb',
     'db',
     'history',
     'insights',
