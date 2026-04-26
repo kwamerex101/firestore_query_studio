@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Profile, ProfileInput, ProfileUpdate } from '@shared/types/profile';
+import {
+  Profile,
+  ProfileInput,
+  ProfileUpdate,
+  RtdbEmulatorProfile,
+  RtdbLiveProfile,
+} from '@shared/types/profile';
 
 describe('ProfileInput', () => {
   it('accepts an emulator profile', () => {
@@ -134,6 +140,80 @@ describe('ProfileInput', () => {
       user: 'x',
     });
     expect(r.success).toBe(false);
+  });
+
+  it('accepts a minimal RTDB live profile', () => {
+    const r = ProfileInput.parse({
+      engine: 'rtdb',
+      kind: 'live',
+      name: 'Prod RTDB',
+      envTag: 'prod',
+      projectId: 'my-proj',
+      serviceAccountPath: '/tmp/sa.json',
+      databaseUrl: 'https://my-proj-default-rtdb.europe-west1.firebasedatabase.app',
+    });
+    if (!('engine' in r) || r.engine !== 'rtdb' || r.kind !== 'live') {
+      throw new Error('expected rtdb live');
+    }
+    expect(r.projectId).toBe('my-proj');
+  });
+
+  it('rejects RTDB live with non-https databaseUrl', () => {
+    const r = ProfileInput.safeParse({
+      engine: 'rtdb',
+      kind: 'live',
+      name: 'x',
+      envTag: 'dev',
+      projectId: 'p',
+      serviceAccountPath: '/tmp/sa.json',
+      databaseUrl: 'http://example.com',
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('accepts an RTDB emulator profile input', () => {
+    const r = ProfileInput.parse({
+      engine: 'rtdb',
+      kind: 'emulator',
+      name: 'Local RTDB',
+      envTag: 'dev',
+      projectId: 'demo-emu',
+    });
+    if (!('engine' in r) || r.engine !== 'rtdb' || r.kind !== 'emulator') {
+      throw new Error('expected rtdb emulator');
+    }
+  });
+});
+
+describe('RtdbProfile on disk', () => {
+  it('round-trips live and emulator', () => {
+    const live = RtdbLiveProfile.parse({
+      id: '1',
+      name: 'L',
+      engine: 'rtdb',
+      kind: 'live',
+      envTag: 'dev',
+      projectId: 'p',
+      serviceAccountPath: '/a.json',
+      databaseUrl: 'https://p-default-rtdb.firebaseio.com',
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    expect(live.engine).toBe('rtdb');
+    const emu = RtdbEmulatorProfile.parse({
+      id: '2',
+      name: 'E',
+      engine: 'rtdb',
+      kind: 'emulator',
+      envTag: 'dev',
+      projectId: 'p',
+      host: '127.0.0.1',
+      port: 9000,
+      databaseUrl: 'https://fqs-rtdb-default-rtdb.firebaseio.com',
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    expect(emu.port).toBe(9000);
   });
 });
 

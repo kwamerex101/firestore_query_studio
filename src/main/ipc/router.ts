@@ -58,11 +58,12 @@ import { getProfileSecret } from '../profiles/secrets';
 import {
   isFirestoreProfile,
   isMssqlProfile,
+  isRtdbProfile,
   isSqlProfile,
 } from '@shared/types/profile';
 import type { SqlDialect } from '@shared/types/profile';
 import type { SqlProbeDraft } from '@shared/types/ipc';
-import { probeSqlDatabases, probeSqlSchemas } from '../drivers';
+import { RtdbDriver, probeSqlDatabases, probeSqlSchemas } from '../drivers';
 import type { SqlProbeConfig } from '../drivers/types';
 import { chat, LlmError } from '../llm/openaiCompat';
 import { listCursorModels, testCursorCli } from '../llm/cursorCli';
@@ -540,6 +541,15 @@ export function registerIpcHandlers(): void {
   });
 
   register(IpcChannels.schemaSample, async ({ collection, collectionGroup, sampleSize }) => {
+    const activeId = await getActiveProfileId();
+    if (activeId) {
+      const p = await getProfile(activeId);
+      if (p && isRtdbProfile(p)) {
+        throw new Error(
+          'Collection schema sampling is for Firestore. Switch to a Firestore profile or use the Realtime path reader.',
+        );
+      }
+    }
     const handle = await getHandleForActive();
     const activeProfile = await getProfile(handle.profileId);
     // `getHandleForActive` has already narrowed to Firestore. The `isFirestoreProfile`
@@ -591,6 +601,19 @@ export function registerIpcHandlers(): void {
     const settings = await getLlmSettings();
     const cursorSettings = await getCursorSettings();
     const claudeSettings = await getClaudeSettings();
+
+    const activeId = await getActiveProfileId();
+    if (activeId) {
+      const p = await getProfile(activeId);
+      if (p && isRtdbProfile(p)) {
+        return {
+          ok: false,
+          code: 'WRONG_ENGINE',
+          message:
+            'NL→Firestore plans require a Firestore profile. Switch the active profile or use the Realtime path reader for RTDB.',
+        };
+      }
+    }
 
     if (provider === 'openai-compat' && (!settings || !settings.apiKey)) {
       return {
@@ -651,6 +674,18 @@ export function registerIpcHandlers(): void {
   });
 
   register(IpcChannels.executeRun, async ({ plan }) => {
+    const activeId = await getActiveProfileId();
+    if (activeId) {
+      const p = await getProfile(activeId);
+      if (p && isRtdbProfile(p)) {
+        return {
+          ok: false,
+          code: 'WRONG_ENGINE',
+          message: 'This runner is for Firestore query plans. Use the Realtime path reader for RTDB.',
+          warnings: [],
+        };
+      }
+    }
     const handle = await getHandleForActive();
     const profile = await getProfile(handle.profileId);
     const firestoreProfile =
@@ -678,9 +713,41 @@ export function registerIpcHandlers(): void {
   });
 
   register(IpcChannels.collectionsList, async () => {
+    const activeId = await getActiveProfileId();
+    if (!activeId) return [];
+    const p = await getProfile(activeId);
+    if (p && isRtdbProfile(p)) {
+      const driver = await getDriverForActive();
+      if (!(driver instanceof RtdbDriver)) {
+        throw new Error('Expected an RTDB driver for the active profile.');
+      }
+      const rows = await driver.listContainers();
+      return rows.map((c) => c.name);
+    }
     const handle = await getHandleForActive();
     const cols = await handle.firestore.listCollections();
     return cols.map((c) => c.id);
+  });
+
+  register(IpcChannels.rtdbRead, async ({ path: pathArg }) => {
+    const driver = await getDriverForActive();
+    if (!(driver instanceof RtdbDriver)) {
+      return {
+        ok: false,
+        code: 'WRONG_ENGINE',
+        message: 'Select a Realtime Database profile to read paths.',
+      };
+    }
+    try {
+      const { value } = await driver.readPath(pathArg);
+      return { ok: true, value } as const;
+    } catch (e) {
+      return {
+        ok: false,
+        code: 'RTDB_READ_FAILED',
+        message: e instanceof Error ? e.message : String(e),
+      };
+    }
   });
 
   register(IpcChannels.dbTestConnection, async ({ profileId }) => {
@@ -973,6 +1040,15 @@ export function registerIpcHandlers(): void {
   });
 
   registerWithSender(IpcChannels.executeStreamStart, async (input, sender) => {
+    const apId = await getActiveProfileId();
+    if (apId) {
+      const p = await getProfile(apId);
+      if (p && isRtdbProfile(p)) {
+        throw new Error(
+          'Streaming Firestore execution is not available for Realtime Database profiles. Use the path reader or switch to Firestore.',
+        );
+      }
+    }
     const handle = await getHandleForActive();
     const profile = await getProfile(handle.profileId);
     const firestoreProfile =

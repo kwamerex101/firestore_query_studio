@@ -11,6 +11,7 @@ export type EnvTag = z.infer<typeof EnvTag>;
  */
 export const Engine = z.enum([
   'firestore',
+  'rtdb',
   'postgres',
   'mysql',
   'mssql',
@@ -71,6 +72,87 @@ export const EmulatorProfile = z.object({
 
 export const FirestoreProfile = z.discriminatedUnion('kind', [LiveProfile, EmulatorProfile]);
 export type FirestoreProfile = z.infer<typeof FirestoreProfile>;
+
+const rtdbUrl = z
+  .string()
+  .min(1)
+  .refine(
+    (s) => {
+      try {
+        const u = new URL(s);
+        return u.protocol === 'https:' && u.host.length > 0;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'databaseUrl must be a valid https URL' },
+  );
+
+// Realtime Database — live (Admin SDK + database URL from Firebase console).
+export const RtdbLiveProfile = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  engine: z.literal('rtdb'),
+  kind: z.literal('live'),
+  envTag: EnvTag,
+  projectId: z.string().min(1),
+  serviceAccountPath: z.string().min(1),
+  /** e.g. https://my-proj-default-rtdb.firebaseio.com */
+  databaseUrl: rtdbUrl,
+  maxMemoryMb: z.number().int().positive().max(8_192).default(512),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type RtdbLiveProfile = z.infer<typeof RtdbLiveProfile>;
+
+// Realtime Database — local emulator (set FIREBASE_DATABASE_EMULATOR_HOST in the driver).
+export const RtdbEmulatorProfile = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  engine: z.literal('rtdb'),
+  kind: z.literal('emulator'),
+  envTag: EnvTag,
+  projectId: z.string().min(1),
+  host: z.string().min(1).default('127.0.0.1'),
+  /** Default 9000 matches the Firebase RTDB emulator. */
+  port: z.number().int().positive().default(9000),
+  /**
+   * Synthetic https URL for Admin SDK; traffic goes to the emulator when
+   * `FIREBASE_DATABASE_EMULATOR_HOST` is set.
+   */
+  databaseUrl: rtdbUrl,
+  maxMemoryMb: z.number().int().positive().max(8_192).default(512),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type RtdbEmulatorProfile = z.infer<typeof RtdbEmulatorProfile>;
+
+const RTDB_DEFAULT_EMULATOR_URL = 'https://fqs-rtdb-default-rtdb.firebaseio.com';
+
+export const RtdbLiveProfileInput = RtdbLiveProfile.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial({ maxMemoryMb: true });
+export type RtdbLiveProfileInput = z.infer<typeof RtdbLiveProfileInput>;
+
+export const RtdbEmulatorProfileInput = RtdbEmulatorProfile.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  databaseUrl: true,
+})
+  .extend({
+    /** Defaults to a synthetic https URL; the emulator is selected via host/port. */
+    databaseUrl: rtdbUrl.optional(),
+  })
+  .partial({ host: true, port: true, maxMemoryMb: true });
+export type RtdbEmulatorProfileInput = z.infer<typeof RtdbEmulatorProfileInput>;
+
+export { RTDB_DEFAULT_EMULATOR_URL };
+
+export const RtdbProfile = z.discriminatedUnion('kind', [RtdbLiveProfile, RtdbEmulatorProfile]);
+export type RtdbProfile = z.infer<typeof RtdbProfile>;
 
 // PostgreSQL — network-reachable server. The plaintext password never lives
 // on this blob; it goes through `secrets.ts` into the OS keychain and is
@@ -255,6 +337,8 @@ export type FileProfile = z.infer<typeof FileProfile>;
 export const Profile = z.union([
   LiveProfile,
   EmulatorProfile,
+  RtdbLiveProfile,
+  RtdbEmulatorProfile,
   PostgresProfile,
   MysqlProfile,
   MssqlProfile,
@@ -393,6 +477,8 @@ export const BigQueryProfileInput = BigQueryProfile
 export type BigQueryProfileInput = z.infer<typeof BigQueryProfileInput>;
 
 export const ProfileInput = z.union([
+  RtdbLiveProfileInput,
+  RtdbEmulatorProfileInput,
   LiveProfileInput,
   EmulatorProfileInput,
   PostgresProfileInput,
@@ -413,6 +499,9 @@ export const ProfileUpdate = z
     serviceAccountPath: z.string().min(1).optional(),
     scanCap: z.number().int().positive().max(10_000_000).optional(),
     sampleSize: z.number().int().positive().max(200).optional(),
+
+    // Realtime Database (live)
+    databaseUrl: z.string().min(1).optional(),
 
     // Shared (Firestore emulator + Postgres/MySQL/MSSQL)
     host: z.string().min(1).optional(),
@@ -543,6 +632,9 @@ export function isBigQueryProfile(p: Profile): p is BigQueryProfile {
 }
 export function isFileProfile(p: Profile): p is FileProfile {
   return p.engine === 'file';
+}
+export function isRtdbProfile(p: Profile): p is RtdbProfile {
+  return p.engine === 'rtdb';
 }
 
 /**

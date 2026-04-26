@@ -15,7 +15,7 @@ import {
   getHandleForActive,
 } from '../firestore/connectionManager';
 import { getProfile } from '../profiles/profileStore';
-import { isFirestoreProfile } from '@shared/types/profile';
+import { isFirestoreProfile, isRtdbProfile } from '@shared/types/profile';
 import { ensureSchema } from '../firestore/schemaCache';
 import { runPlanStream } from '../firestore/streamExecutor';
 import { createRun, type ActiveRun } from '../ipc/streamRuns';
@@ -294,6 +294,14 @@ async function startFirestoreExport(
     };
   }
   const profile = await getProfile(handle.profileId);
+  if (profile && isRtdbProfile(profile)) {
+    return {
+      ok: false as const,
+      code: 'WRONG_ENGINE',
+      message: 'Firestore export requires a Firestore profile. Switch the active profile or use path reads for Realtime Database.',
+      canceled: false,
+    };
+  }
   const firestoreProfile =
     profile && isFirestoreProfile(profile) ? profile : null;
   const profileScanCap = firestoreProfile?.scanCap ?? 500;

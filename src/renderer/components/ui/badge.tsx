@@ -20,6 +20,7 @@ interface EngineBadgeProps extends HTMLAttributes<HTMLSpanElement> {
 
 const engineLabel: Record<Engine, string> = {
   firestore: 'Firestore',
+  rtdb: 'Realtime DB',
   postgres: 'Postgres',
   mysql: 'MySQL',
   mssql: 'SQL Server',
@@ -29,6 +30,7 @@ const engineLabel: Record<Engine, string> = {
 
 const engineClass: Record<Engine, string> = {
   firestore: 'border-amber-400/40 bg-amber-400/10 text-amber-400',
+  rtdb: 'border-orange-400/40 bg-orange-400/10 text-orange-400',
   postgres: 'border-sky-400/40 bg-sky-400/10 text-sky-400',
   mysql: 'border-teal-400/40 bg-teal-400/10 text-teal-400',
   mssql: 'border-indigo-400/40 bg-indigo-400/10 text-indigo-400',

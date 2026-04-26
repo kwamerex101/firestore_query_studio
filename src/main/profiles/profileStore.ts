@@ -9,6 +9,9 @@ import {
   ProfileUpdate,
   LiveProfile,
   EmulatorProfile,
+  RtdbLiveProfile,
+  RtdbEmulatorProfile,
+  RTDB_DEFAULT_EMULATOR_URL,
   PostgresProfile,
   MysqlProfile,
   MssqlProfile,
@@ -201,6 +204,48 @@ export async function createProfile(input: ProfileInput): Promise<Profile> {
       createdAt: now,
       updatedAt: now,
     });
+  } else if (
+    'engine' in parsed &&
+    parsed.engine === 'rtdb' &&
+    'kind' in parsed &&
+    parsed.kind === 'live'
+  ) {
+    if (!existsSync(parsed.serviceAccountPath)) {
+      throw new Error(`Service-account file not found: ${parsed.serviceAccountPath}`);
+    }
+    profile = RtdbLiveProfile.parse({
+      id,
+      name: parsed.name,
+      engine: 'rtdb',
+      kind: 'live',
+      envTag: parsed.envTag,
+      projectId: parsed.projectId,
+      serviceAccountPath: parsed.serviceAccountPath,
+      databaseUrl: parsed.databaseUrl,
+      maxMemoryMb: parsed.maxMemoryMb ?? 512,
+      createdAt: now,
+      updatedAt: now,
+    });
+  } else if (
+    'engine' in parsed &&
+    parsed.engine === 'rtdb' &&
+    'kind' in parsed &&
+    parsed.kind === 'emulator'
+  ) {
+    profile = RtdbEmulatorProfile.parse({
+      id,
+      name: parsed.name,
+      engine: 'rtdb',
+      kind: 'emulator',
+      envTag: parsed.envTag,
+      projectId: parsed.projectId,
+      host: parsed.host ?? '127.0.0.1',
+      port: parsed.port ?? 9000,
+      databaseUrl: parsed.databaseUrl ?? RTDB_DEFAULT_EMULATOR_URL,
+      maxMemoryMb: parsed.maxMemoryMb ?? 512,
+      createdAt: now,
+      updatedAt: now,
+    });
   } else if ('kind' in parsed && parsed.kind === 'live') {
     if (!existsSync(parsed.serviceAccountPath)) {
       throw new Error(`Service-account file not found: ${parsed.serviceAccountPath}`);
@@ -358,7 +403,35 @@ export async function updateProfile(id: string, update: ProfileUpdate): Promise<
       );
     }
     all[idx] = next;
-  } else if (current.kind === 'live') {
+  } else if (current.engine === 'rtdb' && current.kind === 'live') {
+    const next = RtdbLiveProfile.parse({
+      ...current,
+      name: parsed.name ?? current.name,
+      envTag: parsed.envTag ?? current.envTag,
+      projectId: parsed.projectId ?? current.projectId,
+      serviceAccountPath: parsed.serviceAccountPath ?? current.serviceAccountPath,
+      databaseUrl: parsed.databaseUrl !== undefined ? parsed.databaseUrl : current.databaseUrl,
+      maxMemoryMb: parsed.maxMemoryMb ?? current.maxMemoryMb,
+      updatedAt: now,
+    });
+    if (!existsSync(next.serviceAccountPath)) {
+      throw new Error(`Service-account file not found: ${next.serviceAccountPath}`);
+    }
+    all[idx] = next;
+  } else if (current.engine === 'rtdb' && current.kind === 'emulator') {
+    const next = RtdbEmulatorProfile.parse({
+      ...current,
+      name: parsed.name ?? current.name,
+      envTag: parsed.envTag ?? current.envTag,
+      projectId: parsed.projectId ?? current.projectId,
+      host: parsed.host ?? current.host,
+      port: parsed.port ?? current.port,
+      databaseUrl: parsed.databaseUrl !== undefined ? parsed.databaseUrl : current.databaseUrl,
+      maxMemoryMb: parsed.maxMemoryMb ?? current.maxMemoryMb,
+      updatedAt: now,
+    });
+    all[idx] = next;
+  } else if (current.engine === 'firestore' && current.kind === 'live') {
     const next = LiveProfile.parse({
       ...current,
       name: parsed.name ?? current.name,
@@ -367,6 +440,7 @@ export async function updateProfile(id: string, update: ProfileUpdate): Promise<
       serviceAccountPath: parsed.serviceAccountPath ?? current.serviceAccountPath,
       scanCap: parsed.scanCap ?? current.scanCap,
       sampleSize: parsed.sampleSize ?? current.sampleSize,
+      maxMemoryMb: parsed.maxMemoryMb ?? current.maxMemoryMb,
       updatedAt: now,
     });
     if (!existsSync(next.serviceAccountPath)) {
@@ -383,6 +457,7 @@ export async function updateProfile(id: string, update: ProfileUpdate): Promise<
       port: parsed.port ?? current.port,
       scanCap: parsed.scanCap ?? current.scanCap,
       sampleSize: parsed.sampleSize ?? current.sampleSize,
+      maxMemoryMb: parsed.maxMemoryMb ?? current.maxMemoryMb,
       updatedAt: now,
     });
     all[idx] = next;
@@ -406,7 +481,11 @@ export async function deleteProfile(id: string): Promise<void> {
   // Remove any service-account JSON we copied into the app's user-data dir
   // for this profile. The helper is a no-op when the path isn't under our
   // managed directory, so user-chosen paths are always left alone.
-  if (target && target.engine === 'firestore' && target.kind === 'live') {
+  if (
+    target &&
+    ((target.engine === 'firestore' && target.kind === 'live') ||
+      (target.engine === 'rtdb' && target.kind === 'live'))
+  ) {
     try {
       await removeImportedServiceAccount(target.serviceAccountPath);
     } catch {

@@ -62,6 +62,9 @@ const api = {
   collections: {
     list: () => invoke(IpcChannels.collectionsList, undefined),
   },
+  rtdb: {
+    read: (input: unknown) => invoke(IpcChannels.rtdbRead, input),
+  },
   db: {
     testConnection: (input?: unknown) => invoke(IpcChannels.dbTestConnection, input ?? {}),
     probeSqlDatabases: (input: unknown) => invoke(IpcChannels.dbProbeSqlDatabases, input),

@@ -87,6 +87,11 @@ export async function createProfile(input: ProfileInput): Promise<Profile> {
       'File-backed profiles require native SQLite and filesystem access, so they are only available in the desktop app.',
     );
   }
+  if ('engine' in parsed && parsed.engine === 'rtdb') {
+    throw new Error(
+      'Realtime Database (Admin SDK) profiles are not available in the web build. Use the desktop app for RTDB access.',
+    );
+  }
   if (!('kind' in parsed) || parsed.kind === 'emulator') {
     throw new Error(
       'The Firestore emulator flow requires the desktop app. In the web build, create a "live" profile and supply your Firebase Web config.',
@@ -95,19 +100,20 @@ export async function createProfile(input: ProfileInput): Promise<Profile> {
 
   const now = Date.now();
   const id = newId();
+  const pl = parsed as { name: string; envTag: (typeof parsed)['envTag']; projectId: string; scanCap?: number; sampleSize?: number };
   const profile = LiveProfile.parse({
     id,
-    name: parsed.name,
+    name: pl.name,
     engine: 'firestore',
     kind: 'live',
-    envTag: parsed.envTag,
-    projectId: parsed.projectId,
+    envTag: pl.envTag,
+    projectId: pl.projectId,
     // `serviceAccountPath` is an opaque marker on web — see the module
     // docstring. Real Firebase Web config goes into `firebaseConfig` below
     // once the user supplies it (via the `web-auth` sign-in flow).
     serviceAccountPath: makeWebMarker(id),
-    scanCap: parsed.scanCap ?? 500,
-    sampleSize: parsed.sampleSize ?? 10,
+    scanCap: pl.scanCap ?? 500,
+    sampleSize: pl.sampleSize ?? 10,
     createdAt: now,
     updatedAt: now,
   });

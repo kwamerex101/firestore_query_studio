@@ -27,7 +27,10 @@ const ExplainPanel = lazy(() => import('./ExplainPanel').then((m) => ({ default:
 const SchemaEditor = lazy(() => import('./SchemaEditor').then((m) => ({ default: m.SchemaEditor })));
 const InsightsPanel = lazy(() => import('./InsightsPanel').then((m) => ({ default: m.InsightsPanel })));
 const SqlQueryPanel = lazy(() => import('./SqlQueryPanel').then((m) => ({ default: m.SqlQueryPanel })));
-import { isSqlProfile } from '@shared/types/profile';
+const RtdbQueryPanel = lazy(() =>
+  import('./RtdbQueryPanel').then((m) => ({ default: m.RtdbQueryPanel })),
+);
+import { isRtdbProfile, isSqlProfile } from '@shared/types/profile';
 import { explainRunError } from '@shared/probeErrorExplain';
 import { encodeShareUrl, decodeShareUrl } from '../lib/shareUrl';
 import { maybeNotifySlowQuery } from '../lib/slackNotify';
@@ -113,7 +116,7 @@ export function QueryPage({ onSwitchToProfiles }: { onSwitchToProfiles?: () => v
     setCachedEntry(null);
     // Only Firestore profiles expose `collections.list` — Postgres profiles
     // render a dedicated "coming soon" screen below and don't need this.
-    if (activeProfile && activeProfile.engine === 'firestore') {
+    if (activeProfile && (activeProfile.engine === 'firestore' || activeProfile.engine === 'rtdb')) {
       void reloadCollections();
     }
   }, [activeProfile, reloadCollections]);
@@ -396,6 +399,14 @@ export function QueryPage({ onSwitchToProfiles }: { onSwitchToProfiles?: () => v
           profile={activeProfile}
           hasLlmConfigured={!!llm?.hasApiKey}
         />
+      </Suspense>
+    );
+  }
+
+  if (isRtdbProfile(activeProfile)) {
+    return (
+      <Suspense fallback={<PanelLoader />}>
+        <RtdbQueryPanel profile={activeProfile} />
       </Suspense>
     );
   }

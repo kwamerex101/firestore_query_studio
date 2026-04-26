@@ -20,6 +20,7 @@ import {
   isMssqlProfile,
   isMysqlProfile,
   isPostgresProfile,
+  isRtdbProfile,
 } from '@shared/types/profile';
 import { useAppState } from '../state/AppState';
 import { ipc } from '../lib/ipcClient';
@@ -371,6 +372,7 @@ const envChipClass: Record<Profile['envTag'], string> = {
  */
 const engineMeta: Record<Engine, { label: string; icon: LucideIcon }> = {
   firestore: { label: 'Firestore', icon: Flame },
+  rtdb: { label: 'Realtime DB', icon: Database },
   postgres: { label: 'Postgres', icon: Database },
   mysql: { label: 'MySQL', icon: Database },
   mssql: { label: 'SQL Server', icon: Database },
@@ -380,6 +382,7 @@ const engineMeta: Record<Engine, { label: string; icon: LucideIcon }> = {
 
 function getDatabaseName(profile: Profile): string {
   if (isFirestoreProfile(profile)) return profile.projectId;
+  if (isRtdbProfile(profile)) return profile.projectId;
   if (isPostgresProfile(profile)) return profile.database;
   if (isMysqlProfile(profile)) return profile.database;
   if (isMssqlProfile(profile)) return profile.database;
@@ -409,6 +412,11 @@ function getDatabaseTitle(profile: Profile): string {
       ? `${profile.host}\\${profile.instanceName}`
       : `${profile.host}:${profile.port}`;
     return `${meta.label} · ${profile.user}@${hostPart}/${profile.database}`;
+  }
+  if (isRtdbProfile(profile)) {
+    const where =
+      profile.kind === 'emulator' ? `emulator @ ${profile.host}:${profile.port}` : 'live (Admin SDK)';
+    return `${meta.label} · ${profile.projectId} (${where})`;
   }
   return meta.label;
 }

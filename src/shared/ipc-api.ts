@@ -63,6 +63,8 @@ import {
   StreamCancelRequest,
   ExportStartRequest,
   ExportStartOutcome,
+  RtdbReadRequest,
+  RtdbReadOutcome,
 } from './types/ipc';
 import {
   Profile,
@@ -309,6 +311,10 @@ export const ipcApi = {
   [IpcChannels.exportCancel]: {
     request: StreamCancelRequest,
     response: OkAck,
+  },
+  [IpcChannels.rtdbRead]: {
+    request: RtdbReadRequest,
+    response: RtdbReadOutcome,
   },
 } as const;
 
