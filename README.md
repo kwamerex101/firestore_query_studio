@@ -1,4 +1,15 @@
+<div align="center">
+
 # Firestore Query Studio
+
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Electron](https://img.shields.io/badge/Electron-47848F?logo=electron&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase-FFCA28?logo=firebase&logoColor=black)
+
+**Local-first desktop app for exploring Google Cloud Firestore with natural language.**
+
+</div>
 
 **Local-first desktop app** for exploring [Google Cloud Firestore](https://firebase.google.com/docs/firestore) with **natural language**. You pick a Firebase project (or the local emulator), describe what you are looking for in plain English, and the app turns that into a structured query plan, runs it with the **Firebase Admin SDK**, and shows rows in a sortable, exportable table—with explanations, optional AI insights, and links to create missing composite indexes.
 
