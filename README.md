@@ -417,6 +417,12 @@ Quick version:
 
 ---
 
+## Author
+
+Theophilus RexDanquah — [rexdanquah.dev](https://rexdanquah.dev)
+
+---
+
 ## License
 
 This project is licensed under the **MIT License** — see `[LICENSE](./LICENSE)`.
